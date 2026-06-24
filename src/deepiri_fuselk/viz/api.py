@@ -132,9 +132,7 @@ def create_api() -> FastAPI:
     def sim_fusion_run(req: FusionRunRequest) -> dict[str, Any]:
         from deepiri_fuselk.sim.fusion_cell import FusionCell
 
-        _, report = FusionCell(grid_size=req.grid, train_elm=False).run(
-            n_steps=req.steps, seed=42
-        )
+        _, report = FusionCell(grid_size=req.grid, train_elm=False).run(n_steps=req.steps, seed=42)
         return report.to_dict()
 
     @api.get("/api/experiments")
