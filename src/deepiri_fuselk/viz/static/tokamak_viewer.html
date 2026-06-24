@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>fuselk Tokamak Viewer</title>
+  <style>
+    body { margin: 0; background: #0a0a12; color: #eee; font-family: sans-serif; }
+  #info { position: absolute; top: 10px; left: 10px; z-index: 10; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h2>deepiri-fuselk</h2>
+    <p>3D tokamak cross-section · field line overlay</p>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x0a0a12);
+    document.body.appendChild(renderer.domElement);
+
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(3, 1, 16, 100),
+      new THREE.MeshBasicMaterial({ color: 0x4488ff, wireframe: true })
+    );
+    scene.add(torus);
+
+    const plasma = new THREE.Mesh(
+      new THREE.SphereGeometry(0.8, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.6 })
+    );
+    scene.add(plasma);
+
+    const oPoint = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    );
+    oPoint.position.set(2.5, 0.3, 0);
+    scene.add(oPoint);
+
+    camera.position.z = 8;
+    function animate() {
+      requestAnimationFrame(animate);
+      torus.rotation.y += 0.005;
+      oPoint.position.x = 2.5 * Math.cos(Date.now() * 0.001);
+      oPoint.position.y = 0.3 * Math.sin(Date.now() * 0.001);
+      renderer.render(scene, camera);
+    }
+    animate();
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
