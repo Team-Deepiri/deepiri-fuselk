@@ -58,15 +58,7 @@ class LiveSimulation:
         self.state.step_count += 1
         seed = self.state.seed + self.state.step_count
         rs: ReactorStep = self.cell.step(seed=seed)
-        shot_heat = rs.heat_flux
 
-        from deepiri_fuselk.sim.synthetic_data_gen import generate_ece_shot
-
-        shot = generate_ece_shot(self.grid_size, seed=seed)
-        helix_result = self.cell.reactor.helix.process(
-            shot.heat_field, shot.raw_signal, shot.angles
-        )
-        elm = rs.disruption.elm
         self.state.elm_probs.append(rs.disruption.probability)
         fuel = self.cell._fuel_cycle()
         muon = self.cell._muon_cycle()
@@ -76,11 +68,11 @@ class LiveSimulation:
         frame = SimulationFrame(
             step=self.state.step_count,
             seed=seed,
-            raw_heat=shot.heat_field,
-            helix=helix_result,
-            elm=elm,
+            raw_heat=rs.raw_heat,
+            helix=rs.helix,
+            elm=rs.disruption.elm,
             disruption=rs.disruption,
-            controlled_heat=shot_heat,
+            controlled_heat=rs.heat_flux,
             action=rs.action_taken,
             fusion_score=self.state.fusion_score,
             tbr=fuel.tritium_breeding_ratio,

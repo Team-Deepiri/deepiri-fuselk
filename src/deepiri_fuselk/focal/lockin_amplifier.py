@@ -31,21 +31,26 @@ def hilbert_envelope(signal: np.ndarray) -> np.ndarray:
     return np.abs(analytic)
 
 
+def _phase_nearest_indices(angles: np.ndarray, query_angles: np.ndarray) -> np.ndarray:
+    """Circular nearest-neighbor index for each query phase (vectorized)."""
+    diff = np.abs((angles[np.newaxis, :] - query_angles[:, np.newaxis] + np.pi) % (2 * np.pi) - np.pi)
+    return np.argmin(diff, axis=1)
+
+
 def subtract_incoherent_noise(
     signal: np.ndarray,
     angles: np.ndarray,
     rotation_hz: float,
     dt: float = 1e-4,
+    n_cycles: int = 8,
 ) -> np.ndarray:
     """Remove broadband noise via phase-synchronous averaging over N cycles."""
     omega = 2 * np.pi * rotation_hz
     n_bins = len(signal)
-    accumulated = np.zeros(n_bins)
-    n_cycles = 8
+    accumulated = np.zeros(n_bins, dtype=np.float64)
     for k in range(n_cycles):
         phase_shift = omega * dt * k * n_bins
         shifted_angles = (angles + phase_shift) % (2 * np.pi)
-        for i, a in enumerate(shifted_angles):
-            idx = int(np.argmin(np.abs(angles - a)))
-            accumulated[i] += signal[idx]
+        idx = _phase_nearest_indices(angles, shifted_angles)
+        accumulated += signal[idx]
     return accumulated / n_cycles

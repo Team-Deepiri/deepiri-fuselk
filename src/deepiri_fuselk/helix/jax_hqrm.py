@@ -30,12 +30,15 @@ try:
         cy = jnp.mean(jnp.sin(angles))
         return var, jnp.array([cx, cy])
 
-    def _jax_run_hqrm_impl(heat_field: np.ndarray) -> HQRMResult:
+    def _jax_run_hqrm_impl(
+        heat_field: np.ndarray,
+        variance_threshold: float = 0.07,
+    ) -> HQRMResult:
         n = heat_field.shape[0]
         var, center = _kernel_variance(jnp.asarray(heat_field), n)
         var_f = float(var)
         cx, cy = float(center[0]), float(center[1])
-        converged = var_f < 0.07
+        converged = var_f < variance_threshold
         return HQRMResult(
             kernel=[],
             heat_variance=var_f,
@@ -71,9 +74,12 @@ class HQRMBenchmarkReport:
 
 
 def run_hqrm_jax(heat_field: np.ndarray, **kwargs) -> HQRMResult:
-    """Run JAX HQRM if available, else NumPy fallback."""
+    """Run JAX fast-path HQRM if available, else full NumPy quadtree."""
     if _JAX_HQRM_AVAILABLE and _jax_run_hqrm is not None:
-        return _jax_run_hqrm(heat_field)
+        return _jax_run_hqrm(
+            heat_field,
+            variance_threshold=kwargs.get("variance_threshold", 0.07),
+        )
     return run_hqrm(heat_field, **kwargs)
 
 

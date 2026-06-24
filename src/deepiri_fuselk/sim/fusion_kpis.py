@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -57,3 +57,46 @@ def mhd_stability_margin(
     q_risk = max(0.0, (q_limit - q_min) / q_limit) if q_min < q_limit else 0.0
     beta_risk = max(0.0, (beta_n - beta_limit * 0.8) / (beta_limit * 0.2))
     return float(np.clip(0.6 * q_risk + 0.4 * beta_risk, 0.0, 1.0))
+
+
+@dataclass
+class RunningKPIAccumulator:
+    """O(1) rolling means for reactor closed-loop metrics."""
+
+    elm_threshold: float = 0.5
+    step_count: int = 0
+    snr_sum: float = 0.0
+    reward_sum: float = 0.0
+    elm_safe_count: int = 0
+    elm_probs: list[float] = field(default_factory=list)
+
+    def reset(self) -> None:
+        self.step_count = 0
+        self.snr_sum = 0.0
+        self.reward_sum = 0.0
+        self.elm_safe_count = 0
+        self.elm_probs.clear()
+
+    def update(self, *, snr: float, reward: float, elm_probability: float) -> None:
+        self.step_count += 1
+        self.snr_sum += snr
+        self.reward_sum += reward
+        if elm_probability < self.elm_threshold:
+            self.elm_safe_count += 1
+        self.elm_probs.append(elm_probability)
+
+    @property
+    def helix_snr_mean(self) -> float:
+        if self.step_count == 0:
+            return 0.0
+        return self.snr_sum / self.step_count
+
+    @property
+    def venturi_mean_reward(self) -> float:
+        if self.step_count == 0:
+            return 0.0
+        return self.reward_sum / self.step_count
+
+    @property
+    def elm_free_fraction(self) -> float:
+        return elm_free_fraction(self.elm_probs, threshold=self.elm_threshold)
