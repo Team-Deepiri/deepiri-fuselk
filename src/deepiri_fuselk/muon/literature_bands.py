@@ -42,7 +42,9 @@ LITERATURE_BENCHMARKS: tuple[LiteratureBenchmark, ...] = (
 TRIFECTA_LITERATURE_BAND = LITERATURE_BENCHMARKS[-1].fpm_range
 
 
-def trifecta_within_literature(fpm: float, slack_fraction: float = 0.20) -> tuple[bool, tuple[float, float]]:
+def trifecta_within_literature(
+    fpm: float, slack_fraction: float = 0.20
+) -> tuple[bool, tuple[float, float]]:
     """Check a trifecta FPM value against the photon+proton literature band."""
     lo, hi = TRIFECTA_LITERATURE_BAND
     slack = slack_fraction * (hi - lo)
