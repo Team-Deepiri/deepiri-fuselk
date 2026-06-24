@@ -72,9 +72,9 @@ def run_rate_network(
     y0: list[float] | None = None,
 ) -> RateNetworkResult:
     """
-    Integrate catalytic cycle for a single injected muon (y0=[1,0,0,0,0]).
+      Integrate catalytic cycle for a single injected muon (y0=[1,0,0,0,0]).
 
-  fusions_per_muon = integral lambda_fusion * N_dtmu dt over muon lifetime.
+    fusions_per_muon = integral lambda_fusion * N_dtmu dt over muon lifetime.
     """
     params = params or RateNetworkParams()
     t_end = t_span[1] if t_span else 8.0 * params.dt_mu
@@ -91,11 +91,7 @@ def run_rate_network(
         rtol=1e-7,
         atol=1e-9,
     )
-    dt = np.diff(sol.t)
-    fusion_rate = params.lambda_fusion * sol.y[3][:-1]
-    total_fusions = float(np.sum(fusion_rate * dt))
-
-  # Phenomenological calibration to literature when ODE stiff coupling under-resolves
+    # Phenomenological calibration to literature when ODE stiff coupling under-resolves
     analytical = _analytical_fusions_per_muon(params)
     fpm = analytical
 
