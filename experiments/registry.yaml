@@ -1,0 +1,49 @@
+experiments:
+  - id: elm_helix_denoising
+    name: HELIX Focal Denoising
+    category: diagnostics
+    status: simulation
+    module: deepiri_fuselk.helix
+    description: Phase-locked O-point tracking with HQRM 7x7 kernel lock
+
+  - id: oil_water_barrier
+    name: Oil-Water Vapor Barrier
+    category: materials
+    status: simulation
+    module: deepiri_fuselk.physics
+    description: Coupled plasma/vapor PDE with tritium breeding
+
+  - id: tritium_vapor_extraction
+    name: Tritium Vapor Extraction
+    category: fuel_cycle
+    status: simulation
+    module: deepiri_fuselk.barrier
+    description: Peclet-driven outward tritium sweep in lithium vapor blanket
+
+  - id: muon_photon_stripping
+    name: Muon Photon Stripping (XFEL)
+    category: fuel_cycle
+    status: speculative
+    module: deepiri_fuselk.muon
+    description: X-ray photoelectric + vortex OAM muon reactivation
+
+  - id: brine_wall_coating
+    name: Brine Wall Coating Hypothesis
+    category: materials
+    status: speculative
+    module: experiments.lab.brine_wall
+    description: Simulation-only study of salinity barrier coatings (not validated)
+
+  - id: vent_circularization_rl
+    name: Vent Circularization RL
+    category: control
+    status: simulation
+    module: deepiri_fuselk.control
+    description: Hierarchical RL for divertor heat flux symmetrization
+
+  - id: plasma_traffic_routing
+    name: Plasma Traffic Router
+    category: control
+    status: simulation
+    module: deepiri_fuselk.control
+    description: Real-time divertor heat flux routing and congestion detection
