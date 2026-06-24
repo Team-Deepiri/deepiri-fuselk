@@ -6,6 +6,8 @@
 > **Fusion Unified Simulation, ELM Learning & Kinetics** — the open-source autopilot for next-generation tokamaks.
 
 ---
+<img width="1024" height="1024" alt="image" src="https://github.com/user-attachments/assets/fd64ec95-14be-4b05-a053-2a0f3901bad9" />
+
 <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e8c61803-e23d-4c4b-872e-d38ea81f5aaf" />
 
 
