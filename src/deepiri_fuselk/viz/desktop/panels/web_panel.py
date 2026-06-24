@@ -13,7 +13,9 @@ from deepiri_fuselk.viz.desktop.widgets import LoadingOverlay
 class WebPanel(QWidget):
     """Embeds a web view pointed at a URL or local file."""
 
-    def __init__(self, url: str, *, loading_message: str = "Loading view…", parent: QWidget | None = None) -> None:
+    def __init__(
+        self, url: str, *, loading_message: str = "Loading view…", parent: QWidget | None = None
+    ) -> None:
         super().__init__(parent)
         self._url = url
         self._view = QWebEngineView(self)
