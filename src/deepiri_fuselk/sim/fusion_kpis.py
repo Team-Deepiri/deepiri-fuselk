@@ -50,7 +50,9 @@ def elm_free_fraction(elm_probs: list[float], threshold: float = 0.5) -> float:
     return safe / len(elm_probs)
 
 
-def mhd_stability_margin(q_min: float, beta_n: float, q_limit: float = 2.0, beta_limit: float = 3.0) -> float:
+def mhd_stability_margin(
+    q_min: float, beta_n: float, q_limit: float = 2.0, beta_limit: float = 3.0
+) -> float:
     """Disruption risk from q_min and normalized beta (0=safe, 1=imminent)."""
     q_risk = max(0.0, (q_limit - q_min) / q_limit) if q_min < q_limit else 0.0
     beta_risk = max(0.0, (beta_n - beta_limit * 0.8) / (beta_limit * 0.2))
