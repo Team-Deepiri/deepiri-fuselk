@@ -1,6 +1,5 @@
 """Tests for live simulation dashboard and fusion cell."""
 
-import numpy as np
 from deepiri_fuselk.experiments.runner import run_experiment
 from deepiri_fuselk.sim.fusion_cell import FusionCell
 from deepiri_fuselk.viz.dashboard.app import create_app
