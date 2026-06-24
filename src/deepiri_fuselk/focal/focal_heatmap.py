@@ -31,9 +31,7 @@ def focal_heatmap(
 
     grid = np.linspace(-1, 1, size)
     X, Y = np.meshgrid(grid, grid)
-    r2 = (X - 0.3 * np.cos(tracker.state.theta)) ** 2 + (
-        Y - 0.3 * np.sin(tracker.state.theta)
-    ) ** 2
+    r2 = (X - 0.3 * np.cos(tracker.state.theta)) ** 2 + (Y - 0.3 * np.sin(tracker.state.theta)) ** 2
     base = max(abs(center_val), amp) * np.exp(-r2 / 0.25)
     signal_grid = np.resize(cleaned, size)
     return (base + 0.05 * np.outer(signal_grid, signal_grid)).astype(np.float64)
