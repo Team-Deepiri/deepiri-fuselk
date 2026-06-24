@@ -30,7 +30,8 @@ coverage.xml
 # OS
 .DS_Store
 
-# Local data
+# Local runtime data (not the data/ Python package)
+/data/
+.fuselk-data/
 *.h5
 *.hdf5
-data/
