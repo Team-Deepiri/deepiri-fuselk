@@ -46,6 +46,7 @@ pytest = "^8.0"
 pytest-cov = "^5.0"
 ruff = "^0.3"
 mypy = "^1.9"
+types-PyYAML = "^6.0"
 jupyter = "^1.0"
 ipykernel = "^6.29"
 matplotlib = "^3.8"
@@ -91,6 +92,7 @@ ignore = [
     "N802",
     "N815",
     "E741",
+    "B008",
 ]
 
 [tool.mypy]
