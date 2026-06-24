@@ -1,7 +1,5 @@
 """Tests for VISION.md alignment wired into core modules."""
 
-import pytest
-
 from deepiri_fuselk.control.convergence import verify_rl_convergence
 from deepiri_fuselk.helix.helix_engine import HelixEngine
 from deepiri_fuselk.helix.jax_hqrm import benchmark_hqrm_latency, run_hqrm_jax
@@ -60,8 +58,6 @@ def test_rl_train_attaches_convergence(monkeypatch):
 
 
 def test_helix_uses_jax_hqrm_path():
-    import numpy as np
-
     engine = HelixEngine()
     shot = generate_ece_shot(32, seed=0)
     result = engine.process(shot.heat_field, shot.raw_signal, shot.angles)
