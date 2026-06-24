@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from deepiri_fuselk.helix.helix_engine import HelixResult
-from deepiri_fuselk.models.elm_predictor import ELMPredictor, ELMPrediction
+from deepiri_fuselk.models.elm_predictor import ELMPrediction, ELMPredictor
 from deepiri_fuselk.sim.fusion_kpis import mhd_stability_margin
 
 
@@ -39,7 +39,9 @@ class DisruptionDetector:
     ) -> DisruptionAssessment:
         elm_pred = self.elm.predict(helix.focal_map, rotation_hz=helix.rotation_hz)
         mhd = mhd_stability_margin(q_min, beta_n)
-        helix_risk = min(1.0, helix.elm_probability + (1.0 / max(helix.phase_locked_snr, 0.1)) * 0.05)
+        helix_risk = min(
+            1.0, helix.elm_probability + (1.0 / max(helix.phase_locked_snr, 0.1)) * 0.05
+        )
         combined = float(np.clip(0.45 * elm_pred.probability + 0.35 * mhd + 0.2 * helix_risk, 0, 1))
 
         if combined > 0.85:
