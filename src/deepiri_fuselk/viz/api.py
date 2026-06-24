@@ -98,9 +98,9 @@ def create_api() -> FastAPI:
             try:
                 importlib.import_module(name)
                 results.append({"module": name, "status": "ok"})
-            except ImportError as exc:
+            except ImportError:
                 ok = False
-                results.append({"module": name, "status": f"missing: {exc}"})
+                results.append({"module": name, "status": "missing"})
 
         from deepiri_fuselk.sim.vision_alignment import audit_vision_alignment
 
