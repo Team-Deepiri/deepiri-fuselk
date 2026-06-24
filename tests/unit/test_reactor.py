@@ -1,8 +1,7 @@
 """Tests for reactor cell, fusion KPIs, ELM training, disruption detection."""
 
-import pytest
-
 import numpy as np
+import pytest
 from deepiri_fuselk.models.disruption_detector import DisruptionDetector
 from deepiri_fuselk.models.elm_predictor import ELMPredictor
 from deepiri_fuselk.sim.fusion_kpis import FusionKPIs, divertor_uniformity, elm_free_fraction
