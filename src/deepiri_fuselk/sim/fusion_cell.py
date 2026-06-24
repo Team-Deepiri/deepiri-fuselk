@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
-
 from deepiri_fuselk.barrier.breeding_blanket import evaluate_breeding_blanket
 from deepiri_fuselk.barrier.heat_exhaust import evaluate_brine_coating
-from deepiri_fuselk.muon.stripping_orchestrator import StrippingTrifectaResult, run_stripping_trifecta
+from deepiri_fuselk.muon.stripping_orchestrator import (
+    StrippingTrifectaResult,
+    run_stripping_trifecta,
+)
 from deepiri_fuselk.physics.pde_solver import solve_oil_water_steady
 from deepiri_fuselk.physics.pde_system import PDEParameters, peclet_criterion
 from deepiri_fuselk.sim.fusion_kpis import FusionKPIs
@@ -97,7 +98,9 @@ class FusionCell:
     ) -> None:
         self.grid_size = grid_size
         self.brine_salinity = brine_salinity_ppt
-        self.reactor = ReactorCell(grid_size=grid_size, policy_path=policy_path, train_elm=train_elm)
+        self.reactor = ReactorCell(
+            grid_size=grid_size, policy_path=policy_path, train_elm=train_elm
+        )
         self._pde_params = PDEParameters.certified()
         self._pde = solve_oil_water_steady(n_grid=grid_size, params=self._pde_params)
         self._muon: StrippingTrifectaResult = run_stripping_trifecta()
@@ -134,16 +137,20 @@ class FusionCell:
         muon = self._muon_cycle()
 
         actions = list({s.action_taken for s in run.steps})
-        last_kpis = run.steps[-1].kpis if run.steps else FusionKPIs(
-            tritium_breeding_ratio=0,
-            elm_free_fraction=0,
-            divertor_uniformity=0,
-            disruption_risk=1,
-            muon_gain=0,
-            helix_snr_mean=0,
-            venturi_mean_reward=0,
-            q_min=0,
-            beta_n=0,
+        last_kpis = (
+            run.steps[-1].kpis
+            if run.steps
+            else FusionKPIs(
+                tritium_breeding_ratio=0,
+                elm_free_fraction=0,
+                divertor_uniformity=0,
+                disruption_risk=1,
+                muon_gain=0,
+                helix_snr_mean=0,
+                venturi_mean_reward=0,
+                q_min=0,
+                beta_n=0,
+            )
         )
 
         # Enrich KPIs with fuel + muon cycle
