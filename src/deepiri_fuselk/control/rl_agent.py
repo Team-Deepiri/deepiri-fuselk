@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
+from deepiri_fuselk.control.convergence import ConvergenceReport, verify_rl_convergence
 from deepiri_fuselk.control.vent_circularizer_env import VentCircularizerEnv
 
 try:
@@ -24,6 +25,7 @@ class TrainResult:
     mean_reward: float
     policy_path: Path | None
     timesteps: int
+    convergence: ConvergenceReport | None = None
 
 
 def train_vent_policy(
@@ -33,8 +35,14 @@ def train_vent_policy(
     seed: int = 42,
 ) -> TrainResult:
     """Train PPO policy for divertor vent circularization."""
+    convergence = verify_rl_convergence(grid_size=grid_size)
     if not _SB3:
-        return TrainResult(mean_reward=train_random_baseline(episodes=10), policy_path=None, timesteps=0)
+        return TrainResult(
+            mean_reward=train_random_baseline(episodes=10),
+            policy_path=None,
+            timesteps=0,
+            convergence=convergence,
+        )
 
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +76,12 @@ def train_vent_policy(
         rewards.append(ep_r)
 
     model.save(str(save_path))
-    return TrainResult(mean_reward=float(np.mean(rewards)), policy_path=save_path, timesteps=timesteps)
+    return TrainResult(
+        mean_reward=float(np.mean(rewards)),
+        policy_path=save_path,
+        timesteps=timesteps,
+        convergence=convergence,
+    )
 
 
 def load_policy(path: str | Path):

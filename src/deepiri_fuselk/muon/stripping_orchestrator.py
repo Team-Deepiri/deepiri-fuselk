@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from deepiri_fuselk.muon.cyclotron_resonance import CyclotronConfig, resonance_match
 from deepiri_fuselk.muon.photon_stripper import PhotonStripperConfig, can_strip, stripping_rate as photon_rate
 from deepiri_fuselk.muon.proton_stripper import ProtonStripperConfig, stripping_rate as proton_rate
+from deepiri_fuselk.muon.literature_validation import TRIFECTA_LITERATURE_BAND, trifecta_within_literature
 from deepiri_fuselk.muon.rate_network import BREAKEVEN_FUSIONS, RateNetworkParams, RateNetworkResult, run_rate_network
 
 
@@ -30,6 +31,8 @@ class StrippingTrifectaResult:
     projected_fpm: float
     breakeven: bool
     margin_to_breakeven: float
+    literature_aligned: bool
+    literature_band: tuple[float, float]
 
 
 def cyclotron_strip_contribution(config: CyclotronConfig) -> float:
@@ -73,6 +76,7 @@ def run_stripping_trifecta(
     )
     network = run_rate_network(t_span=t_span, params=params)
     margin = network.fusions_per_muon - BREAKEVEN_FUSIONS
+    literature_aligned, literature_band = trifecta_within_literature(network.fusions_per_muon)
 
     return StrippingTrifectaResult(
         R_photon=R_ph_n,
@@ -85,4 +89,6 @@ def run_stripping_trifecta(
         projected_fpm=network.fusions_per_muon,
         breakeven=network.breakeven,
         margin_to_breakeven=margin,
+        literature_aligned=literature_aligned,
+        literature_band=literature_band or TRIFECTA_LITERATURE_BAND,
     )

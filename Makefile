@@ -28,3 +28,6 @@ doctor:
 
 gui:
 	poetry run fuselk gui
+
+fetch-data:
+	poetry run python scripts/fetch_data.py --all

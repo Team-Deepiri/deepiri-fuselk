@@ -71,11 +71,15 @@ class HQRMBenchmarkReport:
         return True
 
 
-def run_hqrm_jax(heat_field: np.ndarray) -> HQRMResult:
+def run_hqrm_jax(heat_field: np.ndarray, **kwargs) -> HQRMResult:
     """Run JAX HQRM if available, else NumPy fallback."""
     if _JAX_HQRM_AVAILABLE and _jax_run_hqrm is not None:
         return _jax_run_hqrm(heat_field)
-    return run_hqrm(heat_field)
+    return run_hqrm(heat_field, **kwargs)
+
+
+def jax_hqrm_installed() -> bool:
+    return _JAX_HQRM_AVAILABLE
 
 
 def benchmark_hqrm_latency(

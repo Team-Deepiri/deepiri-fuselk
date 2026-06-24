@@ -29,8 +29,6 @@ app.add_typer(reactor_app, name="reactor")
 experiments_app = typer.Typer(help="Run catalog experiments")
 app.add_typer(experiments_app, name="experiments")
 app.add_typer(viz_app, name="viz")
-validate_app = typer.Typer(help="Validate rigor claims (PDE, muon, RL, HQRM)")
-app.add_typer(validate_app, name="validate")
 
 
 @app.command()
@@ -39,7 +37,10 @@ def version() -> None:
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    vision: bool = typer.Option(True, "--vision/--no-vision", help="Run VISION.md alignment audit"),
+    skip_slow: bool = typer.Option(False, "--skip-slow", help="Skip RL value-iteration audit"),
+) -> None:
     modules = ["numpy", "scipy", "xarray", "pydantic", "zmq", "pyarrow", "gymnasium", "stable_baselines3"]
     table = Table(title="fuselk doctor")
     table.add_column("Module")
@@ -53,6 +54,27 @@ def doctor() -> None:
             ok = False
             table.add_row(name, f"[red]missing: {exc}[/red]")
     console.print(table)
+
+    if vision:
+        from deepiri_fuselk.sim.vision_alignment import audit_vision_alignment
+
+        report = audit_vision_alignment(skip_slow=skip_slow)
+        vtable = Table(title="VISION.md alignment")
+        vtable.add_column("Pillar")
+        vtable.add_column("Section")
+        vtable.add_column("Status")
+        for pillar in report.pillars:
+            status = "[green]ok[/green]" if pillar.satisfied else f"[yellow]{pillar.gap}[/yellow]"
+            vtable.add_row(pillar.name, pillar.vision_section, status)
+        console.print(vtable)
+        if report.gaps:
+            ok = False
+            console.print("[yellow]Gaps:[/yellow]")
+            for gap in report.gaps:
+                console.print(f"  • {gap}")
+        else:
+            console.print("[green]All VISION pillars aligned with implementation.[/green]")
+
     if not ok:
         raise typer.Exit(code=1)
 
@@ -128,6 +150,62 @@ def data_import(path: Path) -> None:
 
     shot = load_imas_hdf5(path)
     console.print(f"Loaded {shot.shot_id} device={shot.device} heat={shot.heat_field.shape}")
+
+
+@data_app.command("fetch")
+def data_fetch(
+    all_sources: bool = typer.Option(False, "--all", help="Fetch all public sources"),
+    source: list[str] = typer.Option(None, "--source", help="Source id (repeatable)"),
+    root: Path = typer.Option(Path(".fuselk-data"), "--root"),
+    force: bool = typer.Option(False, "--force"),
+    shots: int = typer.Option(100, "--shots"),
+    grid: int = typer.Option(32, "--grid"),
+    max_odl: int = typer.Option(50, "--max-odl"),
+) -> None:
+    """Download and normalize public fusion datasets into .fuselk-data/."""
+    from deepiri_fuselk.data.fetchers import run_fetch
+
+    selected = source if source else (None if not all_sources else None)
+    if not all_sources and not source:
+        selected = None  # defaults inside run_fetch
+    results = run_fetch(
+        root,
+        selected,
+        force=force,
+        n_shots=shots,
+        grid_size=grid,
+        max_odl_discharges=max_odl,
+    )
+    console.print_json(json.dumps({k: v.__dict__ for k, v in results.items()}, indent=2))
+
+
+@data_app.command("catalog")
+def data_catalog() -> None:
+    """List registered data sources and feedback loops."""
+    from deepiri_fuselk.data.fetchers import FETCHERS
+    from deepiri_fuselk.data.sources import load_catalog
+
+    sources, loops = load_catalog()
+    table = Table(title="fuselk data sources")
+    table.add_column("ID")
+    table.add_column("Tier")
+    table.add_column("Device")
+    table.add_column("Fetch")
+    for s in sources:
+        table.add_row(s.id, s.tier, s.device, "yes" if s.id in FETCHERS else "manual")
+    console.print(table)
+    console.print("\n[bold]Feedback loops[/bold]")
+    for fb in loops:
+        console.print(f"  {fb.name}: {fb.in_} → {fb.out}")
+    console.print("\nDocs: docs/DATA_PIPELINE.md")
+
+
+@data_app.command("manifest")
+def data_manifest(root: Path = typer.Option(Path(".fuselk-data"), "--root")) -> None:
+    """Show fetch manifest (provenance, checksums, shot counts)."""
+    from deepiri_fuselk.data.fetchers.manifest import load_manifest
+
+    console.print_json(json.dumps(load_manifest(root).to_dict(), indent=2))
 
 
 @sim_app.command("reactor")
@@ -250,38 +328,6 @@ def gui_launch(
     from deepiri_fuselk.viz.desktop.app import run_desktop_gui
 
     run_desktop_gui(dash_port=dash_port, api_port=api_port, host=host)
-
-
-@validate_app.command("claims")
-def validate_claims(
-    pde: bool = typer.Option(False, "--pde"),
-    muon: bool = typer.Option(False, "--muon"),
-    rl: bool = typer.Option(False, "--rl"),
-    hqrm: bool = typer.Option(False, "--hqrm"),
-    all_claims: bool = typer.Option(False, "--all"),
-) -> None:
-    """Validate existence/uniqueness, muon rates, RL convergence, JAX HQRM latency."""
-    script = Path(__file__).resolve().parents[3] / "scripts" / "validate_claims.py"
-    cmd = [sys.executable, str(script)]
-    if all_claims or not any([pde, muon, rl, hqrm]):
-        cmd.append("--all")
-    else:
-        if pde:
-            cmd.append("--pde")
-        if muon:
-            cmd.append("--muon")
-        if rl:
-            cmd.append("--rl")
-        if hqrm:
-            cmd.append("--hqrm")
-    out = subprocess.check_output(cmd, text=True)
-    console.print(out)
-    data = json.loads(out)
-    if data.get("_all_passed"):
-        console.print("[green]All rigor claims passed.[/green]")
-    else:
-        console.print("[yellow]Some claims need attention — see report above.[/yellow]")
-        raise typer.Exit(code=1)
 
 
 def main() -> None:

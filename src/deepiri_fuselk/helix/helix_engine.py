@@ -10,7 +10,8 @@ from deepiri_fuselk.focal.focal_heatmap import focal_heatmap, from_hqrm, singula
 from deepiri_fuselk.focal.lockin_amplifier import subtract_incoherent_noise
 from deepiri_fuselk.focal.spiral_attention import apply_spiral_attention
 from deepiri_fuselk.helix.coordinate_mapper import boozer_map, field_line_pitch
-from deepiri_fuselk.helix.helical_quadtree import HQRMResult, run_hqrm
+from deepiri_fuselk.helix.helical_quadtree import HQRMResult
+from deepiri_fuselk.helix.jax_hqrm import jax_hqrm_installed, run_hqrm_jax
 from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
 
 
@@ -26,6 +27,7 @@ class HelixResult:
     elm_probability: float
     rotation_hz: float
     phase_locked_snr: float
+    hqrm_backend: str = "numpy"
 
 
 class HelixEngine:
@@ -82,12 +84,13 @@ class HelixEngine:
         _theta, _phi = boozer_map(R.ravel(), Z.ravel())
         pitch = float(np.mean(field_line_pitch(R.ravel(), Z.ravel())))
 
-        # HQRM lock
-        hqrm = run_hqrm(
+        # HQRM lock (JAX when installed, NumPy fallback)
+        hqrm = run_hqrm_jax(
             heat_field,
             shear_threshold=self.shear_threshold,
             variance_threshold=self.variance_threshold,
         )
+        hqrm_backend = "jax" if jax_hqrm_installed() else "numpy"
 
         # Spiral attention + focal map
         attended = apply_spiral_attention(heat_field, pitch=pitch)
@@ -110,6 +113,7 @@ class HelixEngine:
             elm_probability=elm_p,
             rotation_hz=self.rotation_hz,
             phase_locked_snr=snr,
+            hqrm_backend=hqrm_backend,
         )
 
     @property

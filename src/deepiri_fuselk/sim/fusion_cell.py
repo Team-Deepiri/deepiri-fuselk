@@ -14,6 +14,7 @@ from deepiri_fuselk.physics.pde_solver import solve_oil_water_steady
 from deepiri_fuselk.physics.pde_system import PDEParameters, peclet_criterion
 from deepiri_fuselk.sim.fusion_kpis import FusionKPIs
 from deepiri_fuselk.sim.reactor_cell import ReactorCell, ReactorRun, ReactorStep
+from deepiri_fuselk.sim.vision_alignment import VisionAlignmentReport, audit_vision_alignment
 
 
 @dataclass
@@ -34,6 +35,7 @@ class MuonCycleStatus:
     strip_rate_total: float
     photon_active: bool
     cyclotron_locked: bool
+    literature_aligned: bool
 
 
 @dataclass
@@ -45,6 +47,7 @@ class FusionCellReport:
     elm_free_fraction: float
     disruption_risk: float
     recommended_actions: list[str] = field(default_factory=list)
+    vision: VisionAlignmentReport | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -65,10 +68,12 @@ class FusionCellReport:
                 "strip_rate_total": self.muon_cycle.strip_rate_total,
                 "photon_active": self.muon_cycle.photon_active,
                 "cyclotron_locked": self.muon_cycle.cyclotron_locked,
+                "literature_aligned": self.muon_cycle.literature_aligned,
             },
             "elm_free_fraction": self.elm_free_fraction,
             "disruption_risk": self.disruption_risk,
             "recommended_actions": self.recommended_actions,
+            "vision": self.vision.to_dict() if self.vision else None,
         }
 
 
@@ -93,9 +98,10 @@ class FusionCell:
         self.grid_size = grid_size
         self.brine_salinity = brine_salinity_ppt
         self.reactor = ReactorCell(grid_size=grid_size, policy_path=policy_path, train_elm=train_elm)
-        self._pde_params = PDEParameters()
+        self._pde_params = PDEParameters.certified()
         self._pde = solve_oil_water_steady(n_grid=grid_size, params=self._pde_params)
         self._muon: StrippingTrifectaResult = run_stripping_trifecta()
+        self._vision = audit_vision_alignment(pde_params=self._pde_params, skip_slow=True)
 
     def _fuel_cycle(self) -> FuelCycleStatus:
         br = evaluate_breeding_blanket(self._pde.state, self._pde_params)
@@ -119,6 +125,7 @@ class FusionCell:
             strip_rate_total=m.R_total,
             photon_active=m.photon_viable,
             cyclotron_locked=m.cyclotron_locked,
+            literature_aligned=m.literature_aligned,
         )
 
     def run(self, n_steps: int = 100, seed: int = 42) -> tuple[ReactorRun, FusionCellReport]:
@@ -161,6 +168,7 @@ class FusionCell:
             elm_free_fraction=last_kpis.elm_free_fraction,
             disruption_risk=last_kpis.disruption_risk,
             recommended_actions=actions,
+            vision=self._vision,
         )
         return run, report
 

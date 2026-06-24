@@ -5,11 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
 
 from deepiri_fuselk.data.fetchers import FETCHERS, PUBLIC_DEFAULTS, run_fetch
 from deepiri_fuselk.data.fetchers.manifest import load_manifest

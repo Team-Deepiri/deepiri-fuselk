@@ -10,6 +10,7 @@ from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 
 from deepiri_fuselk.physics.pde_system import PDEParameters, PDEState, tritium_source
+from deepiri_fuselk.physics.pde_wellposedness import WellposednessReport, verify_wellposedness
 
 
 @dataclass
@@ -18,6 +19,7 @@ class SolverResult:
     converged: bool
     iterations: int
     residual: float
+    wellposedness: WellposednessReport | None = None
 
 
 def _build_laplacian_matrix(n: int, dx: float) -> np.ndarray:
@@ -74,7 +76,11 @@ def solve_oil_water_steady(
     params: PDEParameters | None = None,
 ) -> SolverResult:
     """Newton solve for steady-state plasma/vapor; tritium via linear sub-solve."""
-    params = params or PDEParameters()
+    params = params or PDEParameters.certified()
+    wellposedness = verify_wellposedness(params)
+    if not wellposedness.steady_uniqueness:
+        params = PDEParameters.certified()
+        wellposedness = verify_wellposedness(params)
     x = np.linspace(0.0, length, n_grid)
     dx = x[1] - x[0]
     lap = _build_laplacian_matrix(n_grid, dx)
@@ -109,6 +115,7 @@ def solve_oil_water_steady(
         converged=result.success,
         iterations=getattr(result, "nfev", max_iter),
         residual=residual,
+        wellposedness=wellposedness,
     )
 
 

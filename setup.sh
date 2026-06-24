@@ -139,6 +139,15 @@ install_python_deps() {
   poetry run fuselk doctor
 }
 
+fetch_datasets() {
+  if [[ "${SKIP_FETCH:-}" == "1" ]]; then
+    warn "Skipping data fetch (SKIP_FETCH=1)"
+    return
+  fi
+  log "Fetching public datasets (synthetic + MIT Open Density Limit)…"
+  poetry run python scripts/fetch_data.py --all --shots 100 --max-odl 50
+}
+
 launch_gui() {
   log "Launching desktop control room…"
   export QTWEBENGINE_DISABLE_SANDBOX=1
@@ -150,9 +159,10 @@ main() {
   install_system_deps
   ensure_poetry
   install_python_deps
+  fetch_datasets
   log "Setup complete."
   log "  Desktop GUI:  ./setup.sh --run   or   poetry run fuselk gui"
-  log "  Web dashboard: poetry run fuselk viz sim"
+  log "  Data fetch:   python scripts/fetch_data.py --all"
   if [[ "$RUN_GUI" == true ]]; then
     launch_gui
   fi

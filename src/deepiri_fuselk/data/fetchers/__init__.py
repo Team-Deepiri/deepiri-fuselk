@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from deepiri_fuselk.data.fetchers.manifest import FetchRecord, load_manifest, save_manifest
 from deepiri_fuselk.data.fetchers.odl import fetch_odl
@@ -55,4 +55,4 @@ def _write_catalog_snapshot(root: Path) -> None:
 
     catalog_dir = root / "catalog"
     catalog_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_CATALOG_PATH, catalog_dir / "sources.yaml")
+    shutil.copy2(_CATALOG_PATH, catalog_dir / "data_sources.yaml")

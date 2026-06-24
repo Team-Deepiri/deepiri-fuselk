@@ -104,6 +104,17 @@ def _run_benchmark(bench: LiteratureBenchmark) -> MuonValidationResult:
     )
 
 
+TRIFECTA_LITERATURE_BAND = LITERATURE_BENCHMARKS[-1].fpm_range
+
+
+def trifecta_within_literature(fpm: float, slack_fraction: float = 0.20) -> tuple[bool, tuple[float, float]]:
+    """Check a trifecta FPM value against the photon+proton literature band."""
+    lo, hi = TRIFECTA_LITERATURE_BAND
+    slack = slack_fraction * (hi - lo)
+    within = (lo - slack) <= fpm <= (hi + slack)
+    return within, TRIFECTA_LITERATURE_BAND
+
+
 def validate_muon_trifecta(
     tolerance_slack: float = 0.15,
 ) -> MuonValidationReport:

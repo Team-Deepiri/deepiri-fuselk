@@ -52,6 +52,16 @@ fuselk sim fusion --steps 50
 fuselk experiments list
 ```
 
+### Data for testing
+
+```bash
+python scripts/fetch_data.py --all    # synthetic corpus + MIT C-Mod ODL
+fuselk data catalog                   # source registry + feedback loops
+fuselk data manifest                  # what was fetched
+```
+
+See [docs/DATA_PIPELINE.md](docs/DATA_PIPELINE.md) for sources, formats, and ingest flow.
+
 ## Experiments
 
 | ID | Status | Description |

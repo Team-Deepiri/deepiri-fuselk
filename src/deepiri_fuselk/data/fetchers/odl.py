@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import urllib.request
 from pathlib import Path
-from typing import Any
 
 from deepiri_fuselk.data.fetchers.manifest import FetchRecord, now_iso
 from deepiri_fuselk.data.normalize import odl_csv_to_shots

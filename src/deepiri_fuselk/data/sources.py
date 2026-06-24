@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-_CATALOG_PATH = Path(__file__).resolve().parents[3] / "data" / "sources.yaml"
+_CATALOG_PATH = Path(__file__).resolve().parents[3] / "config" / "data_sources.yaml"
 
 
 @dataclass
