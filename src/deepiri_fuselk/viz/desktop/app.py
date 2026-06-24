@@ -37,12 +37,14 @@ def run_desktop_gui(
     app.setApplicationName("deepiri-fuselk")
     app.setOrganizationName("Deepiri")
 
+    from deepiri_fuselk.viz.branding import app_icon
     from deepiri_fuselk.viz.desktop.shell import MainShell
     from deepiri_fuselk.viz.desktop.widgets import SplashScreen
 
     splash = SplashScreen()
     splash.show()
     app.processEvents()
+    app.setWindowIcon(app_icon())
 
     splash.showMessage("Starting Dash control room + FastAPI…", align, Qt.GlobalColor.white)
     start_gui_server(
