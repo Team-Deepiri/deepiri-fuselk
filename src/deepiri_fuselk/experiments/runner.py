@@ -85,7 +85,11 @@ def _run_brine(_: ExperimentEntry) -> dict:
 
     results = run_brine_sweep(n_steps=5)
     best = best_salinity(results)
-    return {"id": "brine_wall_coating", "best_salinity_ppt": best, "viable_count": sum(1 for r in results if r.viable)}
+    return {
+        "id": "brine_wall_coating",
+        "best_salinity_ppt": best,
+        "viable_count": sum(1 for r in results if r.viable),
+    }
 
 
 def _run_vent_rl(_: ExperimentEntry) -> dict:
@@ -111,8 +115,8 @@ def _run_traffic(_: ExperimentEntry) -> dict:
     }
 
 
-def _run_fusion_cell(_: ExperimentEntry) -> dict:
+def _run_fusion_cell(_entry: ExperimentEntry) -> dict:
     from deepiri_fuselk.sim.fusion_cell import FusionCell
 
-    _, report = FusionCell(grid_size=16, train_elm=False).run(n_steps=10, seed=0)
+    _reactor_run, report = FusionCell(grid_size=16, train_elm=False).run(n_steps=10, seed=0)
     return {"id": "fusion_cell_full", **report.to_dict()}
