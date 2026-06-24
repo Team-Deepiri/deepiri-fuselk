@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
 from deepiri_fuselk.viz.simulation_engine import SimulationFrame
 from deepiri_fuselk.viz.traffic_viewer import traffic_arrows
+from plotly.subplots import make_subplots
 
 
 def build_control_room_figure(frame: SimulationFrame) -> go.Figure:
