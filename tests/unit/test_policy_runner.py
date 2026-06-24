@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import numpy as np
-
 from deepiri_fuselk.control.policy_runner import HybridPolicyRunner
 
 
