@@ -1,4 +1,4 @@
-.PHONY: install lint test cov notebooks docker doctor
+.PHONY: install lint test cov benchmark docker doctor
 
 install:
 	poetry install --no-interaction
@@ -14,13 +14,8 @@ test:
 cov:
 	poetry run pytest tests/ -m "not slow and not gpu" --cov=deepiri_fuselk --cov-report=term-missing
 
-notebooks:
-	@for nb in notebooks/tutorial_*.ipynb; do \
-		echo "Running $$nb..."; \
-		poetry run jupyter nbconvert --to notebook --execute "$$nb" \
-			--ExecutePreprocessor.timeout=120 \
-			--output /tmp/executed_$$(basename "$$nb") || exit 1; \
-	done
+benchmark:
+	poetry run python scripts/benchmark.py --all
 
 docker:
 	docker build -f deployment/Dockerfile -t deepiri-fuselk:local .

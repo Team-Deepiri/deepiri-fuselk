@@ -12,23 +12,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install Poetry
         run: pip install poetry
-
       - name: Install dependencies
         run: poetry install --no-interaction
-
       - name: Ruff lint
         run: poetry run ruff check src tests
-
       - name: Ruff format check
         run: poetry run ruff format --check src tests
-
       - name: Mypy
         run: poetry run mypy src/deepiri_fuselk
 
@@ -42,53 +36,37 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Install Poetry
         run: pip install poetry
-
       - name: Install dependencies
         run: poetry install --no-interaction
-
       - name: Run tests
         run: poetry run pytest tests/ -m "not slow and not gpu" --cov=deepiri_fuselk --cov-report=xml -q
-
       - name: Upload coverage
         uses: codecov/codecov-action@v4
         if: matrix.python-version == '3.11'
         with:
           file: ./coverage.xml
-          flags: python-${{ matrix.python-version }}
         continue-on-error: true
 
-  notebooks:
-    name: Notebook Smoke
+  benchmark:
+    name: Benchmark Suite
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install Poetry
         run: pip install poetry
-
       - name: Install dependencies
         run: poetry install --no-interaction
-
-      - name: Execute notebooks
-        run: |
-          for nb in notebooks/tutorial_*.ipynb; do
-            echo "Running $nb..."
-            poetry run jupyter nbconvert --to notebook --execute "$nb" \
-              --ExecutePreprocessor.timeout=120 \
-              --output /tmp/executed_$(basename "$nb") || exit 1
-          done
+      - name: Run benchmark
+        run: poetry run python scripts/benchmark.py --all --rl-steps 1000 --twin-steps 20
 
   docker:
     name: Docker Build
@@ -96,15 +74,12 @@ jobs:
     needs: lint
     steps:
       - uses: actions/checkout@v4
-
       - name: Build image
         run: docker build -f deployment/Dockerfile -t deepiri-fuselk:ci .
-
       - name: Smoke test
         run: |
           docker run --rm deepiri-fuselk:ci python -c "
-          import deepiri_fuselk
           from deepiri_fuselk.physics import solve_oil_water_steady
-          r = solve_oil_water_steady(n_grid=16, max_iter=50)
+          r = solve_oil_water_steady(n_grid=16)
           print('ok', r.converged)
           "
