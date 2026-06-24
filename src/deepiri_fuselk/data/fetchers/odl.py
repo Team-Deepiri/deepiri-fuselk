@@ -10,9 +10,7 @@ from deepiri_fuselk.data.fetchers.manifest import FetchRecord, now_iso
 from deepiri_fuselk.data.normalize import odl_csv_to_shots
 from deepiri_fuselk.data.sources import get_source
 
-ODL_CSV_URL = (
-    "https://raw.githubusercontent.com/MIT-PSFC/open_density_limit_database/main/data/DL_DataFrame.csv"
-)
+ODL_CSV_URL = "https://raw.githubusercontent.com/MIT-PSFC/open_density_limit_database/main/data/DL_DataFrame.csv"
 
 
 def _sha256(path: Path) -> str:
