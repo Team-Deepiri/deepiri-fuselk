@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from deepiri_fuselk.control.rl_agent import load_policy, run_policy
+from deepiri_fuselk.control.rl_agent import load_policy
 from deepiri_fuselk.control.venturi_controller import VenturiController, VenturiState
 
 
