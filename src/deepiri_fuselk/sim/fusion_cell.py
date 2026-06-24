@@ -7,12 +7,8 @@ from pathlib import Path
 
 from deepiri_fuselk.barrier.breeding_blanket import evaluate_breeding_blanket
 from deepiri_fuselk.barrier.heat_exhaust import evaluate_brine_coating
-from deepiri_fuselk.muon.stripping_orchestrator import (
-    StrippingTrifectaResult,
-    run_stripping_trifecta,
-)
-from deepiri_fuselk.physics.pde_solver import solve_oil_water_steady
-from deepiri_fuselk.physics.pde_system import PDEParameters, peclet_criterion
+from deepiri_fuselk.physics.pde_system import peclet_criterion
+from deepiri_fuselk.sim.fuel_cycle_context import FuelCycleContext, build_fuel_cycle_context
 from deepiri_fuselk.sim.fusion_kpis import FusionKPIs
 from deepiri_fuselk.sim.reactor_cell import ReactorCell, ReactorRun, ReactorStep
 from deepiri_fuselk.sim.vision_alignment import VisionAlignmentReport, audit_vision_alignment
@@ -93,22 +89,41 @@ class FusionCell:
         self,
         grid_size: int = 32,
         policy_path: Path | None = None,
-        train_elm: bool = True,
+        train_elm: bool = False,
         brine_salinity_ppt: float = 35.0,
+        fuel_cycle: FuelCycleContext | None = None,
+        audit_vision_on_init: bool = False,
     ) -> None:
         self.grid_size = grid_size
         self.brine_salinity = brine_salinity_ppt
+        self._fuel_cycle_ctx = fuel_cycle or build_fuel_cycle_context(grid_size)
         self.reactor = ReactorCell(
-            grid_size=grid_size, policy_path=policy_path, train_elm=train_elm
+            grid_size=grid_size,
+            policy_path=policy_path,
+            train_elm=train_elm,
+            fuel_cycle=self._fuel_cycle_ctx,
         )
-        self._pde_params = PDEParameters.certified()
-        self._pde = solve_oil_water_steady(n_grid=grid_size, params=self._pde_params)
-        self._muon: StrippingTrifectaResult = run_stripping_trifecta()
-        self._vision = audit_vision_alignment(pde_params=self._pde_params, skip_slow=True)
+        self._vision_cache: VisionAlignmentReport | None = None
+        if audit_vision_on_init:
+            self.audit_vision()
+
+    def audit_vision(self, *, skip_slow: bool = True) -> VisionAlignmentReport:
+        """Run VISION.md alignment audit (lazy — not on every sim step)."""
+        self._vision_cache = audit_vision_alignment(
+            pde_params=self._fuel_cycle_ctx.pde_params,
+            skip_slow=skip_slow,
+        )
+        return self._vision_cache
+
+    @property
+    def vision(self) -> VisionAlignmentReport | None:
+        return self._vision_cache
 
     def _fuel_cycle(self) -> FuelCycleStatus:
-        br = evaluate_breeding_blanket(self._pde.state, self._pde_params)
-        pe = peclet_criterion(self._pde_params)
+        br = evaluate_breeding_blanket(
+            self._fuel_cycle_ctx.pde.state, self._fuel_cycle_ctx.pde_params
+        )
+        pe = peclet_criterion(self._fuel_cycle_ctx.pde_params)
         coating = evaluate_brine_coating(salinity_ppt=self.brine_salinity)
         return FuelCycleStatus(
             tritium_breeding_ratio=br.tritium_breeding_ratio,
@@ -120,7 +135,7 @@ class FusionCell:
         )
 
     def _muon_cycle(self) -> MuonCycleStatus:
-        m = self._muon
+        m = self._fuel_cycle_ctx.muon_trifecta
         return MuonCycleStatus(
             fusions_per_muon=m.projected_fpm,
             breakeven=m.breakeven,
@@ -131,7 +146,13 @@ class FusionCell:
             literature_aligned=m.literature_aligned,
         )
 
-    def run(self, n_steps: int = 100, seed: int = 42) -> tuple[ReactorRun, FusionCellReport]:
+    def run(
+        self,
+        n_steps: int = 100,
+        seed: int = 42,
+        *,
+        include_vision: bool = False,
+    ) -> tuple[ReactorRun, FusionCellReport]:
         run = self.reactor.run(n_steps=n_steps, seed=seed)
         fuel = self._fuel_cycle()
         muon = self._muon_cycle()
@@ -153,7 +174,6 @@ class FusionCell:
             )
         )
 
-        # Enrich KPIs with fuel + muon cycle
         enriched = FusionKPIs(
             tritium_breeding_ratio=fuel.tritium_breeding_ratio,
             elm_free_fraction=last_kpis.elm_free_fraction,
@@ -167,6 +187,8 @@ class FusionCell:
         )
         run.final_score = enriched.score()
 
+        vision = self.audit_vision() if include_vision else self._vision_cache
+
         report = FusionCellReport(
             fusion_score=run.final_score,
             reactor=run.to_report(),
@@ -175,7 +197,7 @@ class FusionCell:
             elm_free_fraction=last_kpis.elm_free_fraction,
             disruption_risk=last_kpis.disruption_risk,
             recommended_actions=actions,
-            vision=self._vision,
+            vision=vision,
         )
         return run, report
 

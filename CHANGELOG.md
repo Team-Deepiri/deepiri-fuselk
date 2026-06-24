@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.2] - 2026-06-24
+
+### Changed
+- **Performance** — shared `FuelCycleContext` deduplicates PDE + muon trifecta between `FusionCell` and `ReactorCell`
+- Lazy VISION audit on `FusionCell` (`include_vision=True` or `audit_vision()`); not on every init
+- `train_elm=False` default; load cached `.fuselk-data/models/elm_predictor.json` when present
+- RL convergence check optional (`verify_convergence=True` on `train_vent_policy` / CLI train)
+- CI: single Python 3.11 test job; lighter benchmark step; PPO train test marked `slow`
+
 ## [0.5.1] - 2026-06-24
 
 ### Changed

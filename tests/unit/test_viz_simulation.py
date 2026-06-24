@@ -36,7 +36,7 @@ def test_fusion_cell_report():
     assert "fusion_score" in d
     assert "fuel_cycle" in d
     assert "muon_cycle" in d
-    assert "vision" in d
+    assert d["vision"] is None
     assert d["muon_cycle"]["literature_aligned"] is not None
 
 

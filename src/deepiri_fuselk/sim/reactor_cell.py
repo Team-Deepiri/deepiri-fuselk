@@ -9,16 +9,15 @@ import numpy as np
 
 from deepiri_fuselk.barrier.breeding_blanket import tritium_breeding_ratio
 from deepiri_fuselk.control.policy_runner import HybridPolicyRunner
-from deepiri_fuselk.control.venturi_controller import VenturiController
 from deepiri_fuselk.data.imas_loader import IMASShot, synthetic_imas_shot
-from deepiri_fuselk.helix.helix_engine import HelixEngine
+from deepiri_fuselk.helix.helix_engine import HelixEngine, HelixResult
 from deepiri_fuselk.models.disruption_detector import DisruptionAssessment, DisruptionDetector
 from deepiri_fuselk.models.elm_predictor import ELMPredictor
-from deepiri_fuselk.muon.rate_network import RateNetworkParams, run_rate_network
-from deepiri_fuselk.physics.pde_solver import solve_oil_water_steady
-from deepiri_fuselk.physics.pde_system import PDEParameters
-from deepiri_fuselk.sim.fusion_kpis import FusionKPIs, divertor_uniformity, elm_free_fraction
-from deepiri_fuselk.sim.synthetic_data_gen import generate_ece_shot
+from deepiri_fuselk.sim.fuel_cycle_context import FuelCycleContext, build_fuel_cycle_context
+from deepiri_fuselk.sim.fusion_kpis import FusionKPIs, RunningKPIAccumulator, divertor_uniformity
+from deepiri_fuselk.sim.shot_pipeline import ShotPipeline
+
+DEFAULT_ELM_MODEL = Path(".fuselk-data/models/elm_predictor.json")
 
 
 @dataclass
@@ -28,6 +27,9 @@ class ReactorStep:
     disruption: DisruptionAssessment
     heat_flux: np.ndarray
     action_taken: str
+    helix: HelixResult
+    raw_heat: np.ndarray
+    seed: int
 
 
 @dataclass
@@ -54,98 +56,92 @@ class ReactorCell:
     """
     Self-sustaining fusion cell simulation.
 
-    Closed loop: diagnostics -> HELIX -> disruption detect -> Venturi/RL actuate -> KPI update.
+    Closed loop: diagnostics → HELIX → disruption detect → Venturi/RL actuate → KPI update.
     """
 
     def __init__(
         self,
         grid_size: int = 32,
         policy_path: Path | None = None,
-        train_elm: bool = True,
+        train_elm: bool = False,
+        elm_model_path: Path | None = None,
+        fuel_cycle: FuelCycleContext | None = None,
     ) -> None:
         self.grid_size = grid_size
         self.helix = HelixEngine()
-        self.elm = ELMPredictor()
-        if train_elm:
-            self._bootstrap_elm_model()
+        self.elm = self._init_elm(train_elm, elm_model_path, grid_size)
         self.detector = DisruptionDetector(self.elm)
-        self.venturi = VenturiController()
         self.hybrid = HybridPolicyRunner(policy_path)
-        self._pde = solve_oil_water_steady(n_grid=grid_size)
-        self._muon = run_rate_network(
-            params=RateNetworkParams(R_photon=0.4, R_proton=0.25),
-            t_span=(0.0, 2e-5),
-        )
+        self._pipeline = ShotPipeline(self.helix, self.detector, self.hybrid)
+        self._fuel_cycle = fuel_cycle or build_fuel_cycle_context(grid_size)
         self.imas: IMASShot = synthetic_imas_shot(size=grid_size)
         self._step = 0
-        self._elm_probs: list[float] = []
-        self._rewards: list[float] = []
-        self._snrs: list[float] = []
+        self._kpi_acc = RunningKPIAccumulator()
 
-    def _bootstrap_elm_model(self, n_shots: int = 60) -> None:
-        from deepiri_fuselk.sim.shot_corpus import generate_corpus
+    @staticmethod
+    def _init_elm(train_elm: bool, model_path: Path | None, grid_size: int) -> ELMPredictor:
+        path = model_path or DEFAULT_ELM_MODEL
+        if train_elm:
+            from deepiri_fuselk.sim.shot_corpus import generate_corpus
 
-        corpus = generate_corpus(n_shots=n_shots, grid_size=self.grid_size, seed=42)
-        self.elm.train_from_corpus(corpus)
+            corpus = generate_corpus(n_shots=60, grid_size=grid_size, seed=42)
+            model = ELMPredictor()
+            model.train_from_corpus(corpus)
+            return model
+        if path.exists():
+            return ELMPredictor.load(path)
+        return ELMPredictor()
 
     def reset(self, seed: int = 42) -> ReactorStep:
         self._step = 0
-        self._elm_probs = []
-        self._rewards = []
-        self._snrs = []
+        self._kpi_acc.reset()
         self.imas = synthetic_imas_shot(size=self.grid_size, seed=seed)
+        self.hybrid.venturi.reset()
         return self.step(seed=seed)
 
     def step(self, seed: int | None = None) -> ReactorStep:
         self._step += 1
         s = seed if seed is not None else 42 + self._step
-        shot = generate_ece_shot(self.grid_size, seed=s)
 
-        helix = self.helix.process(shot.heat_field, shot.raw_signal, shot.angles)
-        q_vals = np.array(self.imas.q_profile.values, dtype=np.float64)
-        q_min = float(np.min(q_vals)) if len(q_vals) else 2.0
-        beta_n = float(np.mean(self.imas.Te_profile.values)) / 2000.0
-
-        disruption = self.detector.assess(helix, q_min=q_min, beta_n=beta_n)
-
-        hybrid = self.hybrid.step(
-            shot.heat_field,
-            elm_probability=disruption.probability,
-            rl_steps=1,
+        result = self._pipeline.process(
+            grid_size=self.grid_size,
+            seed=s,
+            q_profile_values=np.array(self.imas.q_profile.values, dtype=np.float64),
+            te_profile_values=np.array(self.imas.Te_profile.values, dtype=np.float64),
         )
-        self._rewards.append(hybrid.venturi.reward)
 
-        # Act on disruption recommendation
-        action = disruption.recommended_action
-        if action == "pellet_inject":
-            hybrid.venturi.action.pellet_ready = True
-        elif action == "gas_puff_radiate":
-            hybrid.venturi.action.gas_puff = 0.8
+        self._kpi_acc.update(
+            snr=result.helix.phase_locked_snr,
+            reward=result.control.venturi.reward,
+            elm_probability=result.disruption.probability,
+        )
 
-        self._elm_probs.append(disruption.probability)
-        self._snrs.append(helix.phase_locked_snr)
-
-        tbr = tritium_breeding_ratio(self._pde.state, PDEParameters())
+        tbr = tritium_breeding_ratio(
+            self._fuel_cycle.pde.state,
+            self._fuel_cycle.pde_params,
+        )
         kpis = FusionKPIs(
             tritium_breeding_ratio=tbr,
-            elm_free_fraction=elm_free_fraction(self._elm_probs),
-            divertor_uniformity=divertor_uniformity(hybrid.final_heat),
-            disruption_risk=disruption.probability,
-            muon_gain=self._muon.fusions_per_muon,
-            helix_snr_mean=float(np.mean(self._snrs)),
-            venturi_mean_reward=float(np.mean(self._rewards)),
-            q_min=q_min,
-            beta_n=beta_n,
+            elm_free_fraction=self._kpi_acc.elm_free_fraction,
+            divertor_uniformity=divertor_uniformity(result.control.final_heat),
+            disruption_risk=result.disruption.probability,
+            muon_gain=self._fuel_cycle.muon_fpm,
+            helix_snr_mean=self._kpi_acc.helix_snr_mean,
+            venturi_mean_reward=self._kpi_acc.venturi_mean_reward,
+            q_min=result.q_min,
+            beta_n=result.beta_n,
         )
 
-        rs = ReactorStep(
+        return ReactorStep(
             step=self._step,
             kpis=kpis,
-            disruption=disruption,
-            heat_flux=hybrid.final_heat,
-            action_taken=action,
+            disruption=result.disruption,
+            heat_flux=result.control.final_heat,
+            action_taken=result.recommended_action,
+            helix=result.helix,
+            raw_heat=result.shot.heat_field,
+            seed=s,
         )
-        return rs
 
     def run(self, n_steps: int = 100, seed: int = 42) -> ReactorRun:
         self.reset(seed=seed)

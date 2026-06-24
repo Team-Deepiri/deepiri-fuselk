@@ -61,7 +61,7 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
       - name: Run benchmark
-        run: poetry run python scripts/benchmark.py --all --rl-steps 1000 --twin-steps 20
+        run: poetry run python scripts/benchmark.py --physics --helix --twin --reactor --twin-steps 20 --reactor-steps 20
 
   docker:
     name: Docker Build

@@ -33,9 +33,10 @@ def train_vent_policy(
     save_path: str | Path = ".fuselk-data/policies/vent_ppo",
     grid_size: int = 16,
     seed: int = 42,
+    verify_convergence: bool = False,
 ) -> TrainResult:
     """Train PPO policy for divertor vent circularization."""
-    convergence = verify_rl_convergence(grid_size=grid_size)
+    convergence = verify_rl_convergence(grid_size=grid_size) if verify_convergence else None
     if not _SB3:
         return TrainResult(
             mean_reward=train_random_baseline(episodes=10),

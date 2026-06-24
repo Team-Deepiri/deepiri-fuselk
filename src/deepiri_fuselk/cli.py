@@ -146,7 +146,7 @@ def train_vent(
 ) -> None:
     from deepiri_fuselk.control.rl_agent import train_vent_policy
 
-    r = train_vent_policy(timesteps=timesteps, save_path=output)
+    r = train_vent_policy(timesteps=timesteps, save_path=output, verify_convergence=True)
     console.print(f"Mean reward={r.mean_reward:.2f} saved={r.policy_path}")
 
 
@@ -229,12 +229,13 @@ def data_manifest(root: Path = typer.Option(Path(".fuselk-data"), "--root")) -> 
 def sim_reactor(
     steps: int = typer.Option(100, "--steps"),
     grid: int = typer.Option(32, "--grid"),
+    train_elm: bool = typer.Option(False, "--train-elm", help="Train ELM on synthetic corpus"),
     output: Path | None = typer.Option(None, "--output", help="Save JSON report"),
 ) -> None:
     """Run closed-loop reactor cell with fusion KPI scoring."""
     from deepiri_fuselk.sim.reactor_cell import ReactorCell
 
-    cell = ReactorCell(grid_size=grid, train_elm=True)
+    cell = ReactorCell(grid_size=grid, train_elm=train_elm)
     run = cell.run(n_steps=steps, seed=42)
     report = run.to_report()
     report["fusion_score"] = run.final_score
@@ -278,7 +279,7 @@ def reactor_score(
     """Quick fusion progress score (fast benchmark)."""
     from deepiri_fuselk.sim.reactor_cell import ReactorCell
 
-    run = ReactorCell(grid_size=grid, train_elm=True).run(n_steps=steps, seed=0)
+    run = ReactorCell(grid_size=grid, train_elm=False).run(n_steps=steps, seed=0)
     console.print(f"[bold]Fusion score:[/bold] {run.final_score:.3f}")
     console.print_json(json.dumps(run.to_report()))
 

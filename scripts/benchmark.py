@@ -78,7 +78,7 @@ def bench_reactor(steps: int = 30) -> dict:
     from deepiri_fuselk.sim.reactor_cell import ReactorCell
 
     t0 = time.perf_counter()
-    cell = ReactorCell(grid_size=16, train_elm=True)
+    cell = ReactorCell(grid_size=16, train_elm=False)
     run = cell.run(n_steps=steps, seed=42)
     elapsed = time.perf_counter() - t0
     report = run.to_report()

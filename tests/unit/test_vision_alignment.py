@@ -53,7 +53,7 @@ def test_rl_train_attaches_convergence(monkeypatch):
     report = verify_rl_convergence(grid_size=8)
     monkeypatch.setattr(rl_agent, "verify_rl_convergence", lambda **kw: report)
     monkeypatch.setattr(rl_agent, "_SB3", False)
-    trained = rl_agent.train_vent_policy()
+    trained = rl_agent.train_vent_policy(verify_convergence=True)
     assert trained.convergence is report
 
 
@@ -81,7 +81,8 @@ def test_hqrm_benchmark():
 
 
 def test_fusion_cell_includes_vision_audit():
-    _, report = FusionCell(grid_size=16, train_elm=False).run(n_steps=3, seed=0)
+    cell = FusionCell(grid_size=16, train_elm=False)
+    _, report = cell.run(n_steps=3, seed=0, include_vision=True)
     assert report.vision is not None
     assert len(report.vision.pillars) >= 6
     assert "vision" in report.to_dict()
