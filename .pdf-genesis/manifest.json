@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "title": "deepiri-fuselk",
+  "subtitle": "Fusion Unified Simulation, ELM Learning & Kinetics",
+  "author": "Deepiri Research",
+  "organization": "Team Deepiri",
+  "paper_mode": "research",
+  "footer": "deepiri-fuselk v0.2.0",
+  "compile": {
+    "output": "papers/fuselk_paper.pdf"
+  }
+}
