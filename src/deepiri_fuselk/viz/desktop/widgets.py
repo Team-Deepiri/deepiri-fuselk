@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from deepiri_fuselk import __version__
+from deepiri_fuselk.viz.branding import load_logo_pixmap
 
 
 class SplashScreen(QSplashScreen):
@@ -40,12 +41,20 @@ def _splash_pixmap():
     grad.setColorAt(0.0, QColor("#101828"))
     grad.setColorAt(1.0, QColor("#0a0c12"))
     painter.fillRect(0, 0, w, h, grad)
-    painter.setPen(QColor("#4488ff"))
-    painter.setFont(QFont("system-ui", 28, QFont.Weight.Bold))
-    painter.drawText(40, 90, "deepiri-fuselk")
+
+    logo = load_logo_pixmap(72)
+    if not logo.isNull():
+        painter.drawPixmap(36, 36, logo)
+        text_x = 124
+    else:
+        text_x = 40
+
+    painter.setPen(QColor("#ffffff"))
+    painter.setFont(QFont("system-ui", 26, QFont.Weight.Bold))
+    painter.drawText(text_x, 78, "deepiri-fuselk")
     painter.setPen(QColor("#8899bb"))
     painter.setFont(QFont("system-ui", 11))
-    painter.drawText(42, 118, "Fusion Unified Simulation, ELM Learning & Kinetics")
+    painter.drawText(text_x, 102, "Fusion Unified Simulation, ELM Learning & Kinetics")
     painter.setPen(QColor("#556677"))
     painter.drawText(42, h - 48, f"v{__version__}  ·  loading Dash + API + Qt shell")
     painter.end()
