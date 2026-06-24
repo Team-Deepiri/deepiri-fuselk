@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  fuselk:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "8050:8050"
+    command: ["fuselk", "viz", "serve", "--host", "0.0.0.0", "--port", "8050"]

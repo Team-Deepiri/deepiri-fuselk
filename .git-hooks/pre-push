@@ -1,0 +1,28 @@
+#!/bin/sh
+
+protected_branches="main master"
+
+while read local_ref local_sha remote_ref remote_sha; do
+  branch_name=$(echo "$remote_ref" | sed 's|refs/heads/||')
+
+  for protected in $protected_branches; do
+    if [ "$branch_name" = "$protected" ]; then
+      echo "ERROR: You cannot push directly to '$protected'."
+      echo "Make a feature branch and use a Pull Request."
+      exit 1
+    fi
+  done
+
+  if [ "$branch_name" = "dev" ]; then
+    echo "ERROR: You cannot push directly to 'dev'."
+    echo "Make a feature branch and use a Pull Request."
+    exit 1
+  fi
+
+  if echo "$branch_name" | grep -qF "team-dev"; then
+    echo "ERROR: You cannot push to branches containing 'team-dev'."
+    exit 1
+  fi
+done
+
+exit 0

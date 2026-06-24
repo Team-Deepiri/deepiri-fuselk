@@ -1,0 +1,12 @@
+paths-ignore:
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/coverage/**"
+  - "**/.venv/**"
+  - "**/.mypy_cache/**"
+  - "**/.pytest_cache/**"
+  - "**/__pycache__/**"
+  - "**/.ipynb_checkpoints/**"
+  - "**/*.pyc"
+  - "**/*.egg-info/**"
