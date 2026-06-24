@@ -1,9 +1,10 @@
-"""Focal singularity heat map generation."""
+"""Focal singularity heat map generation with lock-in denoising."""
 
 from __future__ import annotations
 
 import numpy as np
 
+from deepiri_fuselk.focal.lockin_amplifier import lockin_demodulate, subtract_incoherent_noise
 from deepiri_fuselk.helix.helical_quadtree import HQRMResult
 from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
 
@@ -14,18 +15,22 @@ def focal_heatmap(
     tracker: PhaseLockedTracker | None = None,
     size: int = 32,
 ) -> np.ndarray:
-    """Generate noise-reduced focal heat map centered on tracked O-point."""
+    """Generate noise-reduced focal heat map via lock-in + Gaussian O-point kernel."""
     tracker = tracker or PhaseLockedTracker()
     tracker.predict(dt=1e-4)
-    center_val = tracker.sample_at_phase(raw_signal, angles)
+
+    cleaned = subtract_incoherent_noise(raw_signal, angles, tracker.state.omega)
+    amp, _, _ = lockin_demodulate(cleaned, tracker.state.theta, angles)
+    center_val = tracker.sample_at_phase(cleaned, angles)
 
     grid = np.linspace(-1, 1, size)
     X, Y = np.meshgrid(grid, grid)
-    r2 = X**2 + Y**2
-    base = center_val * np.exp(-r2 / 0.3)
-    signal_grid = np.resize(raw_signal, size)
-    heatmap = base + 0.1 * np.outer(signal_grid, signal_grid)
-    return heatmap.astype(np.float64)
+    r2 = (X - 0.3 * np.cos(tracker.state.theta)) ** 2 + (
+        Y - 0.3 * np.sin(tracker.state.theta)
+    ) ** 2
+    base = max(abs(center_val), amp) * np.exp(-r2 / 0.25)
+    signal_grid = np.resize(cleaned, size)
+    return (base + 0.05 * np.outer(signal_grid, signal_grid)).astype(np.float64)
 
 
 def singularity_gradient(heatmap: np.ndarray) -> tuple[float, float]:

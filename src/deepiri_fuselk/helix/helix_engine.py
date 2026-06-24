@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from deepiri_fuselk.focal.focal_heatmap import focal_heatmap, from_hqrm, singularity_gradient
+from deepiri_fuselk.focal.lockin_amplifier import subtract_incoherent_noise
 from deepiri_fuselk.focal.spiral_attention import apply_spiral_attention
 from deepiri_fuselk.helix.coordinate_mapper import boozer_map, field_line_pitch
 from deepiri_fuselk.helix.helical_quadtree import HQRMResult, run_hqrm
@@ -60,9 +61,16 @@ class HelixEngine:
     ) -> HelixResult:
         """Run full HELIX denoising and focal mapping pipeline."""
         self.tracker.predict(dt)
-
-        # Phase-synchronous sample
-        center = self.tracker.sample_at_phase(raw_signal, angles)
+        cleaned = subtract_incoherent_noise(raw_signal, angles, self.tracker.state.omega)
+        peak_idx = int(np.argmax(np.abs(cleaned)))
+        self.tracker.update(
+            float(angles[peak_idx]),
+            float(angles[peak_idx % len(angles)] * 0.5),
+            float(np.max(heat_field)),
+        )
+        est_omega = self.tracker.estimate_rotation_from_signal(cleaned, angles)
+        self.tracker.x[1] = 0.9 * self.tracker.x[1] + 0.1 * est_omega
+        center = self.tracker.sample_at_phase(cleaned, angles)
         noise_floor = float(np.std(raw_signal))
         snr = abs(center) / max(noise_floor, 1e-9)
         self._snr_history.append(snr)
