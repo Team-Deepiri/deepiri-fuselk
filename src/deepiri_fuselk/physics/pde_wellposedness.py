@@ -8,7 +8,6 @@ import numpy as np
 
 from deepiri_fuselk.physics.pde_system import PDEParameters, interface_thickness
 
-
 # Six coupled fields: n_p, n_v, n_T, n_mu, T_p, T_v
 FIELD_NAMES = ("n_p", "n_v", "n_T", "n_mu", "T_p", "T_v")
 
