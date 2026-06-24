@@ -194,7 +194,10 @@ def create_api() -> FastAPI:
     @api.get("/api/static/{filename}")
     def static_file(filename: str) -> FileResponse:
         static_root = _STATIC.resolve()
-        path = (static_root / filename).resolve()
+        safe_name = Path(filename).name
+        if not safe_name or safe_name in {".", ".."}:
+            raise HTTPException(status_code=404, detail="not found")
+        path = (static_root / safe_name).resolve()
         try:
             path.relative_to(static_root)
         except ValueError as exc:
