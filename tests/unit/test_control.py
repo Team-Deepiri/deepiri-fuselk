@@ -1,6 +1,7 @@
 """Tests for control layer."""
 
 import numpy as np
+import pytest
 from deepiri_fuselk.control.plasma_traffic_router import PlasmaTrafficRouter
 from deepiri_fuselk.control.realtime_bus import RealtimeBus
 from deepiri_fuselk.control.rl_agent import train_random_baseline, train_vent_policy
@@ -50,7 +51,9 @@ def test_rl_baseline_runs():
     assert isinstance(mean_reward, float)
 
 
+@pytest.mark.slow
 def test_ppo_train_short():
-    r = train_vent_policy(timesteps=512, grid_size=8)
+    r = train_vent_policy(timesteps=512, grid_size=8, verify_convergence=True)
     assert r.timesteps == 512
     assert r.policy_path is not None
+    assert r.convergence is not None

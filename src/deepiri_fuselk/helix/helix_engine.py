@@ -9,8 +9,9 @@ import numpy as np
 from deepiri_fuselk.focal.focal_heatmap import focal_heatmap, from_hqrm, singularity_gradient
 from deepiri_fuselk.focal.lockin_amplifier import subtract_incoherent_noise
 from deepiri_fuselk.focal.spiral_attention import apply_spiral_attention
-from deepiri_fuselk.helix.coordinate_mapper import boozer_map, field_line_pitch
-from deepiri_fuselk.helix.helical_quadtree import HQRMResult, run_hqrm
+from deepiri_fuselk.helix.coordinate_mapper import field_line_pitch
+from deepiri_fuselk.helix.helical_quadtree import HQRMResult
+from deepiri_fuselk.helix.jax_hqrm import jax_hqrm_installed, run_hqrm_jax
 from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
 
 
@@ -26,16 +27,24 @@ class HelixResult:
     elm_probability: float
     rotation_hz: float
     phase_locked_snr: float
+    hqrm_backend: str = "numpy"
+
+
+@dataclass
+class _PitchCache:
+    size: int = -1
+    o_point: tuple[float, float] = (0.0, 0.0)
+    pitch: float = 0.5
 
 
 class HelixEngine:
     """
     Helical Extraction & Locked-In Isotropy eXclusion.
 
-    Pipeline:
+    Pipeline (VISION §1):
       1. Phase-locked O-point tracking (Kalman)
-      2. Boozer coordinate unwrap
-      3. HQRM 7x7 kernel lock
+      2. Field-line pitch at O-point
+      3. HQRM 7×7 kernel lock
       4. Spiral attention denoising
       5. Focal singularity heat map
     """
@@ -51,6 +60,18 @@ class HelixEngine:
         self.shear_threshold = shear_threshold
         self.variance_threshold = variance_threshold
         self._snr_history: list[float] = []
+        self._pitch_cache = _PitchCache()
+
+    def _field_line_pitch_at_o_point(self, heat_field: np.ndarray) -> float:
+        """Local pitch near tracked O-point — avoids full-grid Boozer unwrap each step."""
+        n = heat_field.shape[0]
+        ox = float(self.tracker.state.theta / (2 * np.pi) * 0.6 - 0.3)
+        oy = float(np.sin(self.tracker.state.theta) * 0.3)
+        if self._pitch_cache.size == n and self._pitch_cache.o_point == (ox, oy):
+            return self._pitch_cache.pitch
+        pitch = float(field_line_pitch(np.array([ox]), np.array([oy]))[0])
+        self._pitch_cache = _PitchCache(size=n, o_point=(ox, oy), pitch=pitch)
+        return pitch
 
     def process(
         self,
@@ -75,21 +96,16 @@ class HelixEngine:
         snr = abs(center) / max(noise_floor, 1e-9)
         self._snr_history.append(snr)
 
-        # Boozer unwrap for pitch
         n = heat_field.shape[0]
-        grid = np.linspace(-1, 1, n)
-        R, Z = np.meshgrid(grid, grid)
-        _theta, _phi = boozer_map(R.ravel(), Z.ravel())
-        pitch = float(np.mean(field_line_pitch(R.ravel(), Z.ravel())))
+        pitch = self._field_line_pitch_at_o_point(heat_field)
 
-        # HQRM lock
-        hqrm = run_hqrm(
+        hqrm = run_hqrm_jax(
             heat_field,
             shear_threshold=self.shear_threshold,
             variance_threshold=self.variance_threshold,
         )
+        hqrm_backend = "jax" if jax_hqrm_installed() else "numpy"
 
-        # Spiral attention + focal map
         attended = apply_spiral_attention(heat_field, pitch=pitch)
         focal = (
             from_hqrm(hqrm, size=n)
@@ -110,6 +126,7 @@ class HelixEngine:
             elm_probability=elm_p,
             rotation_hz=self.rotation_hz,
             phase_locked_snr=snr,
+            hqrm_backend=hqrm_backend,
         )
 
     @property

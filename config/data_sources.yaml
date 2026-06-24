@@ -1,0 +1,153 @@
+# fuselk data source catalog — where data comes from and how fuselk uses it.
+# See docs/DATA_PIPELINE.md for the full ingest → sim → feedback flow.
+
+sources:
+  - id: odl
+    name: Open Density Limit Database
+    tier: public
+    device: Alcator C-Mod
+    license: CC-BY
+    homepage: https://github.com/MIT-PSFC/open_density_limit_database
+    download:
+      csv: https://raw.githubusercontent.com/MIT-PSFC/open_density_limit_database/main/data/DL_DataFrame.csv
+      hdf5: https://raw.githubusercontent.com/MIT-PSFC/open_density_limit_database/main/data/DL_DataFrame.h5
+    format: csv (recommended) | pandas-hdf5
+    signals:
+      - discharge_ID
+      - time
+      - density_limit_phase
+      - density
+      - plasma_current
+      - toroidal_B_field
+      - elongation
+      - minor_radius
+      - triangularity
+    fuselk_modules:
+      - models.disruption_detector
+      - models.elm_predictor
+      - sim.shot_corpus
+    ingest_path: .fuselk-data/raw/odl/DL_DataFrame.csv
+    normalized_path: .fuselk-data/shots/CMOD_{discharge_id}.h5
+    notes: >
+      Public pedagogical C-Mod timeseries. density_limit_phase is a binary
+      disruption-precursor label. fuselk maps scalars to radial profiles and
+      pairs with synthetic ECE heat fields seeded per discharge for HELIX/ELM.
+
+  - id: synthetic
+    name: fuselk synthetic shot corpus
+    tier: generated
+    device: DIII-D-synthetic
+    license: Apache-2.0 (local)
+    homepage: internal://deepiri_fuselk.sim
+    format: fuselk-hdf5 + npz corpus
+    signals:
+      - ece heat_field
+      - focal_map features
+      - elm_label
+      - fusion KPIs
+    fuselk_modules:
+      - helix.helix_engine
+      - models.elm_predictor
+      - viz.simulation_engine
+      - sim.fusion_cell
+    ingest_path: .fuselk-data/corpus/elm_corpus.npz
+    normalized_path: .fuselk-data/shots/SYN*.h5
+    notes: >
+      Labeled HELIX features from generate_corpus(). Use when no tokamak VPN.
+
+  - id: imas_hdf5
+    name: IMAS / fuselk HDF5 shot archive
+    tier: local
+    device: any
+    license: varies
+    homepage: https://github.com/iterorganization/IMAS-Core
+    format: fuselk-hdf5 (IMAS-compatible layout)
+    signals:
+      - profiles/ne Te q omega
+      - ece/heat_field
+      - time
+    fuselk_modules:
+      - data.imas_loader
+      - sim.digital_twin
+      - viz.dashboard
+    ingest_path: user-provided .h5 path
+    normalized_path: .fuselk-data/shots/
+    notes: >
+      Load via fuselk data import. Export from OMAS/imas_composer or IMAS-Core.
+
+  - id: mdsplus_d3d
+    name: DIII-D MDSplus via OMAS / imas_composer
+    tier: credentials
+    device: DIII-D
+    license: collaboration agreement
+    homepage: https://github.com/GA-FDP/imas_composer
+    format: MDSplus → IMAS IDS → HDF5
+    env:
+      - MDSPLUS_SERVER
+      - DIII_D_USER
+    fuselk_modules:
+      - data.imas_loader
+      - helix.helix_engine
+      - control.venturi_controller
+    notes: >
+      Requires DIII-D access. Use imas_composer.simple_load() then export_imas_hdf5.
+
+  - id: disruption_py
+    name: DisruptionPy ML-ready disruption datasets
+    tier: credentials
+    device: C-Mod, DIII-D, EAST, MAST, etc.
+    license: open-source (data access per device)
+    homepage: https://github.com/MIT-PSFC/disruption-py
+    format: MDSplus or xarray stores → parquet/hdf5
+    fuselk_modules:
+      - models.disruption_detector
+      - models.elm_predictor
+    notes: >
+      pip install disruption-py. MAST workflows are fully open; others need MDSplus.
+
+  - id: iterlike_equil
+    name: ITER-like equilibrium dataset (Hugging Face)
+    tier: public
+    device: ITER-like synthetic
+    license: see dataset card
+    homepage: https://huggingface.co/datasets/matteobonotto/iterlike-equil-sample
+    format: Hugging Face datasets / numpy tensors
+    fuselk_modules:
+      - helix.helix_engine
+      - sim.reactor_cell
+    notes: >
+      ~8k synthetic equilibria for surrogate training; not live shot replay.
+
+  - id: constellaration
+    name: Proxima Fusion Constellaration stellarator dataset
+    tier: public
+    device: QI stellarator synthetic
+    license: MIT
+    homepage: https://huggingface.co/datasets/proxima-fusion/constellaration
+    format: Hugging Face + VMEC wout
+    fuselk_modules:
+      - physics (future stellarator path)
+    notes: >
+      Stellarator boundaries and MHD equilibria; exploratory for fuselk v0.3+.
+
+feedback_loops:
+  - name: diagnostic_ingest
+    in: raw shot / synthetic ECE heat_field
+    through: data.imas_loader → sim.digital_twin / viz.simulation_engine
+    out: HELIX focal_map, ELM probability
+  - name: control_actuation
+    in: HELIX + ELM predictor outputs
+    through: control.venturi_controller → control.policy_runner
+    out: RMP / pellet / sweep action string
+  - name: realtime_bus
+    in: diagnostic numpy frames
+    through: control.realtime_bus (ZeroMQ PUB/SUB)
+    out: downstream consumers / future hardware bridge
+  - name: fuel_cycle
+    in: reactor step KPIs
+    through: sim.fusion_cell fuel + muon cycles
+    out: TBR, Peclet, muon breakeven → dashboard telemetry
+  - name: training_feedback
+    in: .fuselk-data/corpus + labeled shots
+    through: models.elm_predictor.train_from_corpus
+    out: .fuselk-data/models/elm_predictor.json → live inference
