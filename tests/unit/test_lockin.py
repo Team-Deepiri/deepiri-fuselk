@@ -1,7 +1,6 @@
 """Tests for digital lock-in amplifier."""
 
 import numpy as np
-
 from deepiri_fuselk.focal.lockin_amplifier import (
     hilbert_envelope,
     lockin_demodulate,
