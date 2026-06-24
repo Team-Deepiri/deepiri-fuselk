@@ -113,17 +113,19 @@ def verify_rl_convergence(grid_size: int = 8) -> ConvergenceReport:
     obs, _ = env.reset()
     _, r, term, trunc, _ = env.step(env.action_space.sample())
 
-    finite_h = env.max_steps < np.inf
-    bounded_r = abs(r) < 1e6
-    compact_a = np.all(np.isfinite(env.action_space.low)) and np.all(
-        np.isfinite(env.action_space.high)
+    finite_h = bool(env.max_steps < np.inf)
+    bounded_r = bool(abs(r) < 1e6)
+    action_space = env.action_space
+    compact_a = bool(
+        hasattr(action_space, "low")
+        and hasattr(action_space, "high")
+        and np.all(np.isfinite(action_space.low))
+        and np.all(np.isfinite(action_space.high))
     )
 
-    opt_return, bellman_res, vi_iters, vi_ok = run_discretized_value_iteration(
-        grid_size=grid_size
-    )
+    opt_return, bellman_res, vi_iters, vi_ok = run_discretized_value_iteration(grid_size=grid_size)
 
-    ppo_ok = finite_h and bounded_r and compact_a
+    ppo_ok = bool(finite_h and bounded_r and compact_a)
 
     if vi_ok and ppo_ok:
         summary = (
