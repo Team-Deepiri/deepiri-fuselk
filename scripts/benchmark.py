@@ -120,6 +120,13 @@ def bench_rl(timesteps: int = 5000) -> dict:
     }
 
 
+def bench_vision() -> dict:
+    from deepiri_fuselk.sim.vision_alignment import audit_vision_alignment
+
+    report = audit_vision_alignment(skip_slow=True)
+    return report.to_dict()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="fuselk benchmark suite")
     parser.add_argument("--all", action="store_true")
@@ -130,13 +137,14 @@ def main() -> int:
     parser.add_argument("--reactor", action="store_true")
     parser.add_argument("--elm", action="store_true")
     parser.add_argument("--rl", action="store_true")
+    parser.add_argument("--vision", action="store_true")
     parser.add_argument("--rl-steps", type=int, default=5000)
     parser.add_argument("--twin-steps", type=int, default=50)
     parser.add_argument("--reactor-steps", type=int, default=30)
     args = parser.parse_args()
 
     run_all = args.all or not any(
-        [args.physics, args.helix, args.muon, args.twin, args.reactor, args.elm, args.rl]
+        [args.physics, args.helix, args.muon, args.twin, args.reactor, args.elm, args.rl, args.vision]
     )
     results = {}
 
@@ -154,6 +162,8 @@ def main() -> int:
         results["elm"] = bench_elm()
     if run_all or args.rl:
         results["rl"] = bench_rl(args.rl_steps)
+    if run_all or args.vision:
+        results["vision"] = bench_vision()
 
     print(json.dumps(results, indent=2))
     return 0

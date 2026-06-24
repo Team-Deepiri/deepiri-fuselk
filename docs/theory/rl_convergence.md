@@ -14,13 +14,10 @@
 2. **Discretized value iteration**: On coarse state hash, VI converges when Bellman residual $< \epsilon$.
 3. **PPO** (Schulman et al., 2017): With bounded rewards and finite episodes, policy gradient estimates have bounded variance; convergence to stationary point under step-size conditions.
 
-## Verification
+## Verification (wired into training)
 
-```bash
-fuselk validate claims --rl
-```
-
-Reports:
+`train_vent_policy()` attaches a `ConvergenceReport` via `verify_rl_convergence()`.
+Full audit: `fuselk doctor --vision`.
 
 - `bellman_residual` — VI convergence quality
 - `value_iteration_iterations` — iterations to tolerance

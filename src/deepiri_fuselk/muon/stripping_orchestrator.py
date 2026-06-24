@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from deepiri_fuselk.muon.cyclotron_resonance import CyclotronConfig, resonance_match
 from deepiri_fuselk.muon.photon_stripper import PhotonStripperConfig, can_strip, stripping_rate as photon_rate
 from deepiri_fuselk.muon.proton_stripper import ProtonStripperConfig, stripping_rate as proton_rate
-from deepiri_fuselk.muon.literature_validation import TRIFECTA_LITERATURE_BAND, trifecta_within_literature
+from deepiri_fuselk.muon.literature_bands import TRIFECTA_LITERATURE_BAND, trifecta_within_literature
 from deepiri_fuselk.muon.rate_network import BREAKEVEN_FUSIONS, RateNetworkParams, RateNetworkResult, run_rate_network
 
 

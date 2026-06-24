@@ -1,9 +1,17 @@
 # Changelog
 
+## [0.5.1] - 2026-06-24
+
+### Changed
+- **VISION alignment in core paths** — rigor checks wired into `FusionCell`, `solve_oil_water_steady`, `HelixEngine`, `run_stripping_trifecta`, and `train_vent_policy` instead of a standalone validation script
+- `sim/vision_alignment.py` — single audit mapping VISION.md pillars to implementation
+- `fuselk doctor --vision` — module health + VISION pillar table
+- Removed `scripts/validate_claims.py` and `fuselk validate claims`
+
 ## [0.5.0] - 2026-06-24
 
 ### Added
-- **Rigor claims validation** — `fuselk validate claims` / `scripts/validate_claims.py`
+- **Rigor modules** — PDE well-posedness, muon literature bands, RL convergence, JAX HQRM benchmark
 - `physics/pde_wellposedness.py` — 6-field existence/uniqueness (contraction L < 1)
 - `muon/literature_validation.py` — trifecta rate bands vs schematic literature
 - `control/convergence.py` — finite-horizon MDP + discretized value iteration

@@ -10,15 +10,16 @@
 
 Breakeven threshold: **284 fusions/muon** (`BREAKEVEN_FUSIONS`).
 
-## Validation
+## Validation (wired into core)
+
+Every `run_stripping_trifecta()` result includes `literature_aligned` and `literature_band`.
+Full band audit: `fuselk doctor --vision` or `validate_muon_trifecta()`.
 
 ```bash
-python scripts/validate_claims.py --muon
-# or
-fuselk validate claims --muon
+fuselk doctor --vision
 ```
 
-Implementation: `muon/literature_validation.py` runs the BDF rate network and compares against bands with 15% slack for schematic cross-sections.
+Implementation: `muon/literature_bands.py` + `muon/literature_validation.py` + `muon/stripping_orchestrator.py`.
 
 ## Trifecta orchestrator
 

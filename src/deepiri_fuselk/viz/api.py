@@ -101,7 +101,13 @@ def create_api() -> FastAPI:
             except ImportError as exc:
                 ok = False
                 results.append({"module": name, "status": f"missing: {exc}"})
-        return {"ok": ok, "modules": results}
+
+        from deepiri_fuselk.sim.vision_alignment import audit_vision_alignment
+
+        vision = audit_vision_alignment(skip_slow=True).to_dict()
+        if vision.get("gaps"):
+            ok = False
+        return {"ok": ok, "modules": results, "vision": vision}
 
     @api.get("/api/sim/frame")
     def sim_frame() -> dict[str, Any]:

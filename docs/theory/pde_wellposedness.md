@@ -34,11 +34,13 @@ $$L_{contract} = \frac{L_{react}}{\lambda_{min}}$$
 
 **Unique steady state** when $L_{contract} < 1$ (Banach contraction).
 
-Default `PDEParameters()` satisfies this; run:
+Default `PDEParameters.certified()` satisfies this. Every steady solve attaches a certificate:
 
 ```bash
-fuselk validate claims --pde
+fuselk doctor --vision
 ```
+
+Or inspect `SolverResult.wellposedness` from `solve_oil_water_steady()`.
 
 ## Tritium sub-problem
 

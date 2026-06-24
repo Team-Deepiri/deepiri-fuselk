@@ -13,8 +13,11 @@
 
 ```bash
 poetry install --with jax
-fuselk validate claims --hqrm
+fuselk doctor --vision
+# or scripts/benchmark.py --vision
 ```
+
+`HelixEngine.process()` calls `run_hqrm_jax()` on every frame.
 
 ## Report fields
 

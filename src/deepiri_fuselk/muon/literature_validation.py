@@ -4,44 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from deepiri_fuselk.muon.rate_network import BREAKEVEN_FUSIONS, RateNetworkParams, run_rate_network
-from deepiri_fuselk.muon.stripping_orchestrator import StrippingTrifectaConfig, run_stripping_trifecta
-
-
-@dataclass
-class LiteratureBenchmark:
-    name: str
-    fpm_range: tuple[float, float]
-    source: str
-    R_photon: float = 0.0
-    R_proton: float = 0.0
-    R_col: float = 0.35
-
-
-# Schematic targets from external-field-assisted muon reactivation literature
-LITERATURE_BENCHMARKS: tuple[LiteratureBenchmark, ...] = (
-    LiteratureBenchmark(
-        name="collision_only",
-        fpm_range=(105.0, 120.0),
-        source="Baseline alpha-sticking with R_col ~ 0.35",
-        R_col=0.35,
-    ),
-    LiteratureBenchmark(
-        name="xfel_photon_assisted",
-        fpm_range=(148.0, 165.0),
-        source="X-ray photoelectric stripping (schematic)",
-        R_col=0.35,
-        R_photon=0.25,
-    ),
-    LiteratureBenchmark(
-        name="photon_proton_trifecta",
-        fpm_range=(180.0, 320.0),
-        source="Combined photon + proton stripping (fuselk target band)",
-        R_col=0.35,
-        R_photon=0.25,
-        R_proton=0.18,
-    ),
+from deepiri_fuselk.muon.literature_bands import (
+    LITERATURE_BENCHMARKS,
+    TRIFECTA_LITERATURE_BAND,
+    LiteratureBenchmark,
+    trifecta_within_literature,
 )
+from deepiri_fuselk.muon.rate_network import BREAKEVEN_FUSIONS, RateNetworkParams, run_rate_network
+from deepiri_fuselk.muon.stripping_orchestrator import run_stripping_trifecta
 
 
 @dataclass
@@ -91,7 +61,6 @@ def _run_benchmark(bench: LiteratureBenchmark) -> MuonValidationResult:
     )
     result = run_rate_network(params=params)
     lo, hi = bench.fpm_range
-    # Allow 20% slack for schematic rate constants vs published curves
     slack = 0.20 * (hi - lo)
     within = (lo - slack) <= result.fusions_per_muon <= (hi + slack)
     return MuonValidationResult(
@@ -102,17 +71,6 @@ def _run_benchmark(bench: LiteratureBenchmark) -> MuonValidationResult:
         breakeven=result.breakeven,
         strip_rate=result.strip_rate,
     )
-
-
-TRIFECTA_LITERATURE_BAND = LITERATURE_BENCHMARKS[-1].fpm_range
-
-
-def trifecta_within_literature(fpm: float, slack_fraction: float = 0.20) -> tuple[bool, tuple[float, float]]:
-    """Check a trifecta FPM value against the photon+proton literature band."""
-    lo, hi = TRIFECTA_LITERATURE_BAND
-    slack = slack_fraction * (hi - lo)
-    within = (lo - slack) <= fpm <= (hi + slack)
-    return within, TRIFECTA_LITERATURE_BAND
 
 
 def validate_muon_trifecta(
@@ -132,3 +90,13 @@ def validate_muon_trifecta(
         all_benchmarks_pass=all(r.within_tolerance for r in results),
         trifecta_pass=trifecta_pass,
     )
+
+
+__all__ = [
+    "LITERATURE_BENCHMARKS",
+    "TRIFECTA_LITERATURE_BAND",
+    "MuonValidationReport",
+    "MuonValidationResult",
+    "trifecta_within_literature",
+    "validate_muon_trifecta",
+]
