@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 
 from deepiri_fuselk.focal.lockin_amplifier import lockin_demodulate, subtract_incoherent_noise
-from deepiri_fuselk.helix.helical_quadtree import HQRMResult
 from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
+
+if TYPE_CHECKING:
+    from deepiri_fuselk.helix.helical_quadtree import HQRMResult
 
 
 def focal_heatmap(
