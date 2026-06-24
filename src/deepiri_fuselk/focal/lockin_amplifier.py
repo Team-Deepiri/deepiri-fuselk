@@ -33,7 +33,9 @@ def hilbert_envelope(signal: np.ndarray) -> np.ndarray:
 
 def _phase_nearest_indices(angles: np.ndarray, query_angles: np.ndarray) -> np.ndarray:
     """Circular nearest-neighbor index for each query phase (vectorized)."""
-    diff = np.abs((angles[np.newaxis, :] - query_angles[:, np.newaxis] + np.pi) % (2 * np.pi) - np.pi)
+    diff = np.abs(
+        (angles[np.newaxis, :] - query_angles[:, np.newaxis] + np.pi) % (2 * np.pi) - np.pi
+    )
     return np.argmin(diff, axis=1)
 
 
