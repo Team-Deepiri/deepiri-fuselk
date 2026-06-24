@@ -63,9 +63,7 @@ class ExperimentsPanel(QWidget):
         self._entries = load_registry()
         self._table.setRowCount(len(self._entries))
         for row, entry in enumerate(self._entries):
-            for col, text in enumerate(
-                [entry.id, entry.status, entry.category, entry.description]
-            ):
+            for col, text in enumerate([entry.id, entry.status, entry.category, entry.description]):
                 item = QTableWidgetItem(text)
                 if col == 0:
                     item.setData(Qt.ItemDataRole.UserRole, entry.id)
@@ -77,7 +75,11 @@ class ExperimentsPanel(QWidget):
         if not rows:
             self._output.setPlainText("Select an experiment row first.")
             return
-        exp_id = self._table.item(rows[0].row(), 0).data(Qt.ItemDataRole.UserRole)
+        item = self._table.item(rows[0].row(), 0)
+        if item is None:
+            self._output.setPlainText("Select an experiment row first.")
+            return
+        exp_id = item.data(Qt.ItemDataRole.UserRole)
         self._btn_run.setEnabled(False)
         try:
             result = run_experiment(str(exp_id))
