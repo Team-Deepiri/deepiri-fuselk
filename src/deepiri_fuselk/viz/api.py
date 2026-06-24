@@ -18,6 +18,12 @@ from deepiri_fuselk.experiments.runner import run_experiment
 from deepiri_fuselk.viz.simulation_engine import LiveSimulation, SimulationFrame
 
 _STATIC = Path(__file__).resolve().parent / "static"
+_STATIC_ROOT = _STATIC.resolve()
+_ALLOWED_STATIC: dict[str, Path] = {}
+for _rel in ("tokamak_viewer.html", "branding/deepiri_favicon.svg"):
+    _candidate = (_STATIC / _rel).resolve()
+    if _candidate.is_relative_to(_STATIC_ROOT):
+        _ALLOWED_STATIC[_rel] = _candidate
 _sim = LiveSimulation(grid_size=24)
 
 
@@ -150,10 +156,13 @@ def create_api() -> FastAPI:
 
     @api.post("/api/experiments/{exp_id}/run")
     def experiments_run(exp_id: str) -> dict[str, Any]:
+        known = {e.id for e in load_registry()}
+        if exp_id not in known:
+            raise HTTPException(status_code=404, detail="unknown experiment")
         try:
             return run_experiment(exp_id)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError:
+            raise HTTPException(status_code=404, detail="unknown experiment") from None
 
     @api.post("/api/physics/oil-water")
     def physics_oil_water(req: OilWaterRequest) -> dict[str, Any]:
@@ -191,16 +200,9 @@ def create_api() -> FastAPI:
 
     @api.get("/api/static/{filename}")
     def static_file(filename: str) -> FileResponse:
-        static_root = _STATIC.resolve()
-        safe_name = Path(filename).name
-        if not safe_name or safe_name in {".", ".."}:
-            raise HTTPException(status_code=404, detail="not found")
-        path = (static_root / safe_name).resolve()
-        try:
-            path.relative_to(static_root)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail="not found") from exc
-        if not path.is_file():
+        key = filename.replace("\\", "/").lstrip("/")
+        path = _ALLOWED_STATIC.get(key)
+        if path is None or not path.is_file():
             raise HTTPException(status_code=404, detail="not found")
         return FileResponse(path)
 
