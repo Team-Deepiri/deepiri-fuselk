@@ -14,7 +14,9 @@ from rich.table import Table
 
 from deepiri_fuselk import __version__
 
-app = typer.Typer(name="fuselk", help="Fusion Unified Simulation, ELM Learning & Kinetics", no_args_is_help=True)
+app = typer.Typer(
+    name="fuselk", help="Fusion Unified Simulation, ELM Learning & Kinetics", no_args_is_help=True
+)
 console = Console()
 
 sim_app = typer.Typer(help="Run simulations")
@@ -41,7 +43,16 @@ def doctor(
     vision: bool = typer.Option(True, "--vision/--no-vision", help="Run VISION.md alignment audit"),
     skip_slow: bool = typer.Option(False, "--skip-slow", help="Skip RL value-iteration audit"),
 ) -> None:
-    modules = ["numpy", "scipy", "xarray", "pydantic", "zmq", "pyarrow", "gymnasium", "stable_baselines3"]
+    modules = [
+        "numpy",
+        "scipy",
+        "xarray",
+        "pydantic",
+        "zmq",
+        "pyarrow",
+        "gymnasium",
+        "stable_baselines3",
+    ]
     table = Table(title="fuselk doctor")
     table.add_column("Module")
     table.add_column("Status")
@@ -99,7 +110,9 @@ def sim_oil_water(
     transient = mode in ("transient", "both")
     if steady:
         r = solve_oil_water_steady(n_grid=64)
-        console.print(f"Steady: converged={r.converged} residual={r.residual:.2e} iter={r.iterations}")
+        console.print(
+            f"Steady: converged={r.converged} residual={r.residual:.2e} iter={r.iterations}"
+        )
     if transient:
         hist = solve_oil_water_transient(n_grid=32, t_end=1.0)
         console.print(f"Transient: {len(hist)} steps, final n_T wall={hist[-1].n_T[-1]:.4e}")
@@ -128,7 +141,9 @@ def sim_muon() -> None:
 
 
 @train_app.command("vent")
-def train_vent(timesteps: int = 20_000, output: Path = Path(".fuselk-data/policies/vent_ppo")) -> None:
+def train_vent(
+    timesteps: int = 20_000, output: Path = Path(".fuselk-data/policies/vent_ppo")
+) -> None:
     from deepiri_fuselk.control.rl_agent import train_vent_policy
 
     r = train_vent_policy(timesteps=timesteps, save_path=output)
@@ -136,7 +151,9 @@ def train_vent(timesteps: int = 20_000, output: Path = Path(".fuselk-data/polici
 
 
 @data_app.command("export")
-def data_export(shot_id: str = "SYN001", output: Path = Path(".fuselk-data/shots/export.h5")) -> None:
+def data_export(
+    shot_id: str = "SYN001", output: Path = Path(".fuselk-data/shots/export.h5")
+) -> None:
     from deepiri_fuselk.data.imas_loader import export_imas_hdf5, synthetic_imas_shot
 
     shot = synthetic_imas_shot(shot_id)
