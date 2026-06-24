@@ -24,6 +24,10 @@ viz_app = typer.Typer(help="Visualization")
 app.add_typer(sim_app, name="sim")
 app.add_typer(train_app, name="train")
 app.add_typer(data_app, name="data")
+reactor_app = typer.Typer(help="Full reactor cell simulation")
+app.add_typer(reactor_app, name="reactor")
+experiments_app = typer.Typer(help="Run catalog experiments")
+app.add_typer(experiments_app, name="experiments")
 app.add_typer(viz_app, name="viz")
 
 
@@ -52,21 +56,23 @@ def doctor() -> None:
 
 
 @app.command()
-def benchmark(all_modules: bool = typer.Option(True, "--all"), rl_steps: int = 5000) -> None:
+def benchmark(rl_steps: int = 5000) -> None:
     """Run full benchmark suite."""
     script = Path(__file__).resolve().parents[3] / "scripts" / "benchmark.py"
-    cmd = [sys.executable, str(script), "--rl-steps", str(rl_steps)]
-    if all_modules:
-        cmd.append("--all")
+    cmd = [sys.executable, str(script), "--rl-steps", str(rl_steps), "--all"]
     out = subprocess.check_output(cmd, text=True)
     console.print(out)
     console.print("[green]Benchmark complete.[/green]")
 
 
 @sim_app.command("oil-water")
-def sim_oil_water(steady: bool = True, transient: bool = False) -> None:
+def sim_oil_water(
+    mode: str = typer.Option("steady", help="steady, transient, or both"),
+) -> None:
     from deepiri_fuselk.physics.pde_solver import solve_oil_water_steady, solve_oil_water_transient
 
+    steady = mode in ("steady", "both")
+    transient = mode in ("transient", "both")
     if steady:
         r = solve_oil_water_steady(n_grid=64)
         console.print(f"Steady: converged={r.converged} residual={r.residual:.2e} iter={r.iterations}")
@@ -120,6 +126,109 @@ def data_import(path: Path) -> None:
 
     shot = load_imas_hdf5(path)
     console.print(f"Loaded {shot.shot_id} device={shot.device} heat={shot.heat_field.shape}")
+
+
+@sim_app.command("reactor")
+def sim_reactor(
+    steps: int = typer.Option(100, "--steps"),
+    grid: int = typer.Option(32, "--grid"),
+    output: Path | None = typer.Option(None, "--output", help="Save JSON report"),
+) -> None:
+    """Run closed-loop reactor cell with fusion KPI scoring."""
+    from deepiri_fuselk.sim.reactor_cell import ReactorCell
+
+    cell = ReactorCell(grid_size=grid, train_elm=True)
+    run = cell.run(n_steps=steps, seed=42)
+    report = run.to_report()
+    report["fusion_score"] = run.final_score
+    if output:
+        output.write_text(json.dumps(report, indent=2))
+        console.print(f"[green]Report saved to {output}[/green]")
+    console.print_json(json.dumps(report))
+
+
+@train_app.command("elm")
+def train_elm(
+    shots: int = 300,
+    grid: int = 32,
+    output: Path = Path(".fuselk-data/models/elm_predictor.json"),
+) -> None:
+    """Train ELM predictor on labeled synthetic corpus."""
+    from deepiri_fuselk.models.elm_predictor import ELMPredictor
+    from deepiri_fuselk.sim.shot_corpus import generate_corpus
+
+    corpus = generate_corpus(n_shots=shots, grid_size=grid, seed=42)
+    model = ELMPredictor()
+    acc = model.train_from_corpus(corpus)
+    model.save(output)
+    console.print(f"Train accuracy={acc:.3f} corpus={shots} saved={output}")
+
+
+@reactor_app.command("run")
+def reactor_run(
+    steps: int = typer.Option(100, "--steps"),
+    grid: int = typer.Option(32, "--grid"),
+    report: Path | None = typer.Option(None, "--report", help="Save JSON report"),
+) -> None:
+    sim_reactor(steps=steps, grid=grid, output=report)
+
+
+@reactor_app.command("score")
+def reactor_score(
+    steps: int = typer.Option(50, "--steps"),
+    grid: int = typer.Option(16, "--grid"),
+) -> None:
+    """Quick fusion progress score (fast benchmark)."""
+    from deepiri_fuselk.sim.reactor_cell import ReactorCell
+
+    run = ReactorCell(grid_size=grid, train_elm=True).run(n_steps=steps, seed=0)
+    console.print(f"[bold]Fusion score:[/bold] {run.final_score:.3f}")
+    console.print_json(json.dumps(run.to_report()))
+
+
+@sim_app.command("fusion")
+def sim_fusion(
+    steps: int = typer.Option(50, "--steps"),
+    grid: int = typer.Option(24, "--grid"),
+    output: Path | None = typer.Option(None, "--output", help="Save JSON report"),
+) -> None:
+    """Run full FusionCell (reactor + fuel cycle + muon trifecta)."""
+    from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+    _, report = FusionCell(grid_size=grid, train_elm=False).run(n_steps=steps, seed=42)
+    data = report.to_dict()
+    if output:
+        output.write_text(json.dumps(data, indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+    console.print_json(json.dumps(data))
+
+
+@experiments_app.command("list")
+def experiments_list() -> None:
+    from deepiri_fuselk.experiments.registry import load_registry
+
+    table = Table(title="fuselk experiments")
+    table.add_column("ID")
+    table.add_column("Status")
+    table.add_column("Category")
+    table.add_column("Description")
+    for e in load_registry():
+        table.add_row(e.id, e.status, e.category, e.description[:60])
+    console.print(table)
+
+
+@experiments_app.command("run")
+def experiments_run(exp_id: str) -> None:
+    from deepiri_fuselk.experiments.runner import run_experiment
+
+    result = run_experiment(exp_id)
+    console.print_json(json.dumps(result, indent=2))
+
+
+@viz_app.command("sim")
+def viz_sim(host: str = "127.0.0.1", port: int = 8050) -> None:
+    """Launch live FusionCell simulation dashboard."""
+    viz_serve(host=host, port=port)
 
 
 @viz_app.command("serve")

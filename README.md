@@ -43,9 +43,9 @@ cd deepiri-fuselk
 poetry install
 
 fuselk doctor
-fuselk sim oil-water --steps 200
-fuselk sim run --episodes 10
-fuselk viz serve   # → http://127.0.0.1:8050
+fuselk sim fusion --steps 50
+fuselk viz sim          # live FusionCell dashboard → http://127.0.0.1:8050
+fuselk experiments list
 ```
 
 ## Experiments

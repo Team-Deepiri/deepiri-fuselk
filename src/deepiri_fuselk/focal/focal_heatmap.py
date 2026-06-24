@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from deepiri_fuselk.focal.lockin_amplifier import lockin_demodulate, subtract_incoherent_noise
-from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
 
 if TYPE_CHECKING:
     from deepiri_fuselk.helix.helical_quadtree import HQRMResult
+    from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
 
 
 def focal_heatmap(
@@ -20,6 +20,8 @@ def focal_heatmap(
     size: int = 32,
 ) -> np.ndarray:
     """Generate noise-reduced focal heat map via lock-in + Gaussian O-point kernel."""
+    from deepiri_fuselk.helix.kalman_tracker import PhaseLockedTracker
+
     tracker = tracker or PhaseLockedTracker()
     tracker.predict(dt=1e-4)
 

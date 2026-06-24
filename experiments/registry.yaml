@@ -47,3 +47,10 @@ experiments:
     status: simulation
     module: deepiri_fuselk.control
     description: Real-time divertor heat flux routing and congestion detection
+
+  - id: fusion_cell_full
+    name: Full Fusion Cell Integration
+    category: integration
+    status: simulation
+    module: deepiri_fuselk.sim.fusion_cell
+    description: End-to-end FusionCell — HELIX, Venturi, fuel cycle, muon trifecta

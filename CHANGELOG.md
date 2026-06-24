@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0] - 2026-06-24
+
+### Added
+- **Live simulation dashboard** — FusionCell steps in real time with KPI strip, disruption gauge, traffic map
+- **`LiveSimulation`** engine + Plotly figure builders for control room
+- **`FusionCell`** top-level orchestrator (reactor + oil-water TBR + brine coating + muon trifecta)
+- **`stripping_orchestrator`** — unified photon + proton + cyclotron muon recycling
+- **Experiment runner** — `fuselk experiments list/run`, YAML registry loaders
+- **`docs/STACK.md`** — technology stack vs OpenMC/IMAS/BLUEMIRA
+- CLI: `fuselk sim fusion`, `fuselk viz sim`, `fuselk experiments`
+
+### Changed
+- Dashboard dark theme, reset button, configurable refresh interval, 3D tokamak viewer link
+- Typer upgraded for reliable CLI options; PyYAML added for experiment registry
+
+## [0.3.0] - 2026-06-24
+
+### Added
+- **Jupyter notebook suite** — six vision/math/experiment notebooks under `notebooks/` (HELIX, oil–water PDEs, muon cycle, Venturi control, ReactorCell digital twin)
+- Jupyter dev dependencies (`jupyter`, `ipykernel`, `matplotlib`, `nbformat`)
+- **FusionKPIs** composite progress score for reproducible benchmarking
+- **Trainable ELMPredictor** — logistic regression on labeled synthetic shot corpus with save/load
+- **DisruptionDetector** — fuses HELIX, ELM, and MHD stability into actuation recommendations
+- **Shot corpus generator** for supervised ELM training
+- CLI: `fuselk reactor run`, `fuselk reactor score`, `fuselk train elm`, `fuselk sim reactor`
+- Benchmark suite: `--reactor`, `--elm` targets
+- Restored Jupyter notebook tutorials under `notebooks/` (replaces v0.2 benchmark-only workflow)
+
 ## [0.2.0] - 2026-06-24
 
 ### Added
@@ -15,7 +43,7 @@
 - CLI: `fuselk benchmark`, `train vent`, `data export/import`, `sim muon`
 
 ### Removed
-- Tutorial notebooks (replaced by benchmark script)
+- Tutorial notebooks (replaced by benchmark script) — **restored in v0.3** under `notebooks/`
 
 ## [0.1.0] - 2026-06-24
 

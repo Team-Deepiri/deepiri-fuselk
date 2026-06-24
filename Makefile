@@ -1,4 +1,4 @@
-.PHONY: install lint test cov benchmark docker doctor
+.PHONY: install lint test cov benchmark docker doctor notebooks
 
 install:
 	poetry install --no-interaction
@@ -16,6 +16,9 @@ cov:
 
 benchmark:
 	poetry run python scripts/benchmark.py --all
+
+notebooks:
+	poetry run python scripts/generate_notebooks.py
 
 docker:
 	docker build -f deployment/Dockerfile -t deepiri-fuselk:local .
