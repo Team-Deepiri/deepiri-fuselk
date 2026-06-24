@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from deepiri_fuselk import __version__
+from deepiri_fuselk.viz.branding import app_icon, load_logo_pixmap
 from deepiri_fuselk.viz.desktop.nav_config import NAV_ENTRIES
 from deepiri_fuselk.viz.desktop.panels import (
     DoctorPanel,
@@ -50,10 +51,11 @@ class MainShell(QMainWindow):
         self.setMinimumSize(QSize(1200, 760))
         self.resize(1520, 940)
         self.setStyleSheet(SHELL_QSS)
+        self.setWindowIcon(app_icon())
         self._stack = QStackedWidget()
         self._nav = QListWidget()
         self._nav.setObjectName("nav-list")
-        self._telemetry: dict[str, QLabel] = {}
+        self._telemetry: dict[str, QLabel | None] = {}
         self._telemetry_chips: dict[str, QFrame] = {}
         self._build_panels()
         self._build_layout()
@@ -113,12 +115,26 @@ class MainShell(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
+        brand_row = QWidget()
+        brand_row.setObjectName("brand-row")
+        brand_layout = QHBoxLayout(brand_row)
+        brand_layout.setContentsMargins(16, 16, 16, 8)
+        brand_layout.setSpacing(10)
+        logo = QLabel()
+        logo.setObjectName("brand-logo")
+        logo.setPixmap(load_logo_pixmap(40))
+        logo.setFixedSize(40, 40)
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(2)
         title = QLabel("deepiri-fuselk")
         title.setObjectName("brand-title")
         sub = QLabel("Fusion control room")
         sub.setObjectName("brand-sub")
-        layout.addWidget(title)
-        layout.addWidget(sub)
+        brand_text.addWidget(title)
+        brand_text.addWidget(sub)
+        brand_layout.addWidget(logo)
+        brand_layout.addLayout(brand_text, stretch=1)
+        layout.addWidget(brand_row)
 
         row_by_section: dict[str, int] = {}
         for entry in NAV_ENTRIES:
@@ -167,7 +183,8 @@ class MainShell(QMainWindow):
             ("snr", "HELIX SNR"),
         ]:
             chip = self._telemetry_chip(label)
-            self._telemetry[key] = chip.findChild(QLabel, "telemetry-value")
+            value_label = chip.findChild(QLabel, "telemetry-value")
+            self._telemetry[key] = value_label  # may be None before first update
             self._telemetry_chips[key] = chip
             layout.addWidget(chip)
 
@@ -266,16 +283,24 @@ class MainShell(QMainWindow):
                 frame = json.loads(resp.read().decode())
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             return
-        self._telemetry["fusion"].setText(f"{frame['fusion_score']:.1%}")
+        fusion_lbl = self._telemetry.get("fusion")
+        if fusion_lbl is not None:
+            fusion_lbl.setText(f"{frame['fusion_score']:.1%}")
         risk = frame["disruption_probability"]
-        self._telemetry["disruption"].setText(f"{risk:.1%}")
+        disruption_lbl = self._telemetry.get("disruption")
+        if disruption_lbl is not None:
+            disruption_lbl.setText(f"{risk:.1%}")
         chip = self._telemetry_chips.get("disruption")
         if chip is not None:
             chip.setProperty("alert", "true" if risk > 0.5 else "false")
             chip.style().unpolish(chip)
             chip.style().polish(chip)
-        self._telemetry["tbr"].setText(f"{frame['tbr']:.2f}")
-        self._telemetry["snr"].setText(f"{frame['helix']['phase_locked_snr']:.1f}x")
+        tbr_lbl = self._telemetry.get("tbr")
+        if tbr_lbl is not None:
+            tbr_lbl.setText(f"{frame['tbr']:.2f}")
+        snr_lbl = self._telemetry.get("snr")
+        if snr_lbl is not None:
+            snr_lbl.setText(f"{frame['helix']['phase_locked_snr']:.1f}x")
 
     @staticmethod
     def _ping(url: str) -> bool:
