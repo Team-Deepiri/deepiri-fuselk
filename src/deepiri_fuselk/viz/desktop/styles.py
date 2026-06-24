@@ -28,18 +28,21 @@ QWidget#sidebar {
     border-right: 1px solid #222838;
 }
 QLabel#brand-title {
-    font-size: 17px;
+    font-size: 15px;
     font-weight: 800;
     color: #ffffff;
-    padding: 18px 18px 2px 18px;
+    padding: 0;
     letter-spacing: 0.3px;
 }
 QLabel#brand-sub {
     font-size: 10px;
     color: #6a7a99;
-    padding: 0 18px 10px 18px;
+    padding: 0;
     text-transform: uppercase;
     letter-spacing: 1.2px;
+}
+QLabel#brand-logo {
+    background: transparent;
 }
 QLabel#nav-section {
     font-size: 10px;
