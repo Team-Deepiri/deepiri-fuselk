@@ -6,8 +6,8 @@
 > **Fusion Unified Simulation, ELM Learning & Kinetics** — the open-source autopilot for next-generation tokamaks.
 
 ---
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e8c61803-e23d-4c4b-872e-d38ea81f5aaf" />
 
-## Why fuselk exists
 
 The fusion community has OpenMC (neutronics), IMAS (data), and BLUEMIRA (design). None of them solve the hardest live problem: **predicting, controlling, and preventing ELMs and disruptions in real time** while closing the tritium fuel cycle.
 
