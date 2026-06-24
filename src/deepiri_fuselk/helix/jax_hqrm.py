@@ -20,7 +20,6 @@ try:
     @jax.jit
     def _kernel_variance(heat: jnp.ndarray, n: int) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Vectorized 7x7 kernel variance on normalized grid."""
-        grid = jnp.linspace(-1.0, 1.0, n)
         # Sample 49 points on a ring (7x7 proxy)
         angles = jnp.linspace(0, 2 * jnp.pi, 49, endpoint=False)
         ix = ((jnp.cos(angles) + 1) * 0.5 * (n - 1)).astype(jnp.int32)
