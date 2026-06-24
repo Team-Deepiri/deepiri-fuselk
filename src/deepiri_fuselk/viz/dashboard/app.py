@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from dash import Dash, Input, Output, State, dcc, html
-
 from deepiri_fuselk.viz.dashboard.figures import build_control_room_figure, build_kpi_strip
 from deepiri_fuselk.viz.simulation_engine import LiveSimulation
 
@@ -32,14 +31,29 @@ def create_app() -> Dash:
         },
         children=[
             html.Header(
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "14px",
+                    "marginBottom": "4px",
+                },
                 children=[
-                    html.H1(
-                        "deepiri-fuselk Control Room",
-                        style={"margin": "0 0 4px 0", "color": "#fff"},
+                    html.Img(
+                        src="/assets/branding/deepiri_logo.png",
+                        alt="Deepiri",
+                        style={"height": "44px", "width": "44px"},
                     ),
-                    html.P(
-                        "Live FusionCell simulation · HELIX · Venturi · ELM/disruption · fuel & muon cycle",
-                        style={"margin": 0, "color": "#888"},
+                    html.Div(
+                        children=[
+                            html.H1(
+                                "deepiri-fuselk Control Room",
+                                style={"margin": "0 0 4px 0", "color": "#fff"},
+                            ),
+                            html.P(
+                                "Live FusionCell simulation · HELIX · Venturi · ELM/disruption · fuel & muon cycle",
+                                style={"margin": 0, "color": "#888"},
+                            ),
+                        ],
                     ),
                 ],
             ),
@@ -52,7 +66,11 @@ def create_app() -> Dash:
                 },
                 children=[
                     _stat_card("Step", "stat-step", f"{frame.step}"),
-                    _stat_card("O-Point", "stat-opoint", f"({frame.helix.o_point[0]:.2f}, {frame.helix.o_point[1]:.2f})"),
+                    _stat_card(
+                        "O-Point",
+                        "stat-opoint",
+                        f"({frame.helix.o_point[0]:.2f}, {frame.helix.o_point[1]:.2f})",
+                    ),
                     _stat_card("SNR", "stat-snr", f"{frame.helix.phase_locked_snr:.1f}x"),
                     _stat_card("Action", "stat-action", frame.action),
                 ],
@@ -65,7 +83,12 @@ def create_app() -> Dash:
             ),
             dcc.Graph(id="control-room", figure=build_control_room_figure(frame)),
             html.Div(
-                style={"display": "flex", "gap": "12px", "alignItems": "center", "marginTop": "12px"},
+                style={
+                    "display": "flex",
+                    "gap": "12px",
+                    "alignItems": "center",
+                    "marginTop": "12px",
+                },
                 children=[
                     html.Button(
                         "Reset simulation",
