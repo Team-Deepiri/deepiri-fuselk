@@ -96,16 +96,10 @@ class SimLabPanel(QWidget):
     def _show_frame(self, frame_dict: dict) -> None:
         risk = frame_dict["disruption_probability"]
         self._cards["step"].set_value(str(frame_dict["step"]), f"seed {frame_dict['seed']}")
-        self._cards["fusion"].set_value(
-            f"{frame_dict['fusion_score']:.1%}", "composite KPI"
-        )
-        self._cards["disruption"].set_value(
-            f"{risk:.1%}", "ELM + disruption", alert=risk > 0.5
-        )
+        self._cards["fusion"].set_value(f"{frame_dict['fusion_score']:.1%}", "composite KPI")
+        self._cards["disruption"].set_value(f"{risk:.1%}", "ELM + disruption", alert=risk > 0.5)
         self._cards["tbr"].set_value(f"{frame_dict['tbr']:.3f}", "breeding ratio")
-        self._cards["muon"].set_value(
-            f"{frame_dict['muon_fpm']:.0f}", "fusions / muon"
-        )
+        self._cards["muon"].set_value(f"{frame_dict['muon_fpm']:.0f}", "fusions / muon")
         self._cards["snr"].set_value(
             f"{frame_dict['helix']['phase_locked_snr']:.1f}x",
             f"O-point {tuple(frame_dict['helix']['o_point'])}",
@@ -132,9 +126,9 @@ class SimLabPanel(QWidget):
 
         self._btn_fusion.setEnabled(False)
         try:
-            _, report = FusionCell(
-                grid_size=self._grid.value(), train_elm=False
-            ).run(n_steps=self._fusion_steps.value(), seed=self._seed.value())
+            _, report = FusionCell(grid_size=self._grid.value(), train_elm=False).run(
+                n_steps=self._fusion_steps.value(), seed=self._seed.value()
+            )
             self._output.setPlainText(json.dumps(report.to_dict(), indent=2))
         finally:
             self._btn_fusion.setEnabled(True)
