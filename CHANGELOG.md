@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0] - 2026-06-24
+
+### Added
+- **Rigor claims validation** — `fuselk validate claims` / `scripts/validate_claims.py`
+- `physics/pde_wellposedness.py` — 6-field existence/uniqueness (contraction L < 1)
+- `muon/literature_validation.py` — trifecta rate bands vs schematic literature
+- `control/convergence.py` — finite-horizon MDP + discretized value iteration
+- `helix/jax_hqrm.py` — JAX HQRM kernel + latency benchmark
+- Theory docs: `pde_wellposedness.md`, `muon_validation.md`, `rl_convergence.md`, `hqrm_benchmark.md`
+
+### Changed
+- Muon rate network: catalytic recycling + literature-calibrated yield
+- Default `PDEParameters.alpha` tuned; `PDEParameters.certified()` for uniqueness proof
+
 ## [0.4.0] - 2026-06-24
 
 ### Added

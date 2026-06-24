@@ -111,33 +111,44 @@ def build_control_room_figure(frame: SimulationFrame) -> go.Figure:
 
 def build_kpi_strip(frame: SimulationFrame) -> go.Figure:
     """Horizontal KPI indicators: fusion score, TBR, muon, ELM-free, divertor uniformity."""
+    # Titles live on each Indicator (not subplot_titles) to avoid bleed in tight columns.
+    titles = ("Fusion", "TBR", "μ fus", "ELM-free", "Div U")
     fig = make_subplots(
         rows=1,
         cols=5,
         specs=[[{"type": "indicator"}] * 5],
-        subplot_titles=("Fusion Score", "TBR", "μ fusions", "ELM-free", "Divertor U"),
+        horizontal_spacing=0.08,
     )
     metrics = [
-        (frame.fusion_score * 100, 100, "Fusion"),
-        (min(frame.tbr, 1.5) / 1.5 * 100, 100, "TBR"),
-        (min(frame.muon_fpm, 350) / 350 * 100, 100, "Muon"),
-        (frame.elm_free_fraction * 100, 100, "ELM"),
-        (frame.divertor_uniformity * 100, 100, "Div"),
+        (frame.fusion_score * 100, 100),
+        (min(frame.tbr, 1.5) / 1.5 * 100, 100),
+        (min(frame.muon_fpm, 350) / 350 * 100, 100),
+        (frame.elm_free_fraction * 100, 100),
+        (frame.divertor_uniformity * 100, 100),
     ]
-    for i, (val, mx, _) in enumerate(metrics, start=1):
+    for i, ((val, mx), title) in enumerate(zip(metrics, titles, strict=True), start=1):
         fig.add_trace(
             go.Indicator(
                 mode="gauge+number",
                 value=val,
-                number={"suffix": "%", "font": {"size": 20}},
+                title={"text": title, "font": {"size": 11, "color": "#9aa8c4"}},
+                number={"suffix": "%", "font": {"size": 18}},
                 gauge={
-                    "axis": {"range": [0, mx]},
-                    "bar": {"color": "#4488ff"},
+                    "axis": {"range": [0, mx], "tickwidth": 0},
+                    "bar": {"color": "#4488ff", "thickness": 0.35},
                     "bgcolor": "#1a1d27",
+                    "borderwidth": 0,
                 },
             ),
             row=1,
             col=i,
         )
-    fig.update_layout(height=200, showlegend=False, paper_bgcolor="#0f1117", font={"color": "#e0e0e0"})
+    fig.update_layout(
+        height=220,
+        showlegend=False,
+        paper_bgcolor="#0f1117",
+        plot_bgcolor="#0f1117",
+        font={"color": "#e0e0e0"},
+        margin={"t": 28, "b": 12, "l": 16, "r": 16},
+    )
     return fig

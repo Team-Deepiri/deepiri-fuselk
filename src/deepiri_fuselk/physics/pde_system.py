@@ -14,7 +14,7 @@ class PDEParameters:
     D_p: float = 0.05
     D_v: float = 0.10
     D_T: float = 0.02
-    alpha: float = 1.0
+    alpha: float = 0.15
     v_v: float = 0.5
     n0: float = 1.0
     n_wall: float = 1.0
@@ -22,6 +22,11 @@ class PDEParameters:
     phi_n: float = 1.0
     kappa_p: float = 0.01
     kappa_v: float = 0.5
+
+    @classmethod
+    def certified(cls) -> PDEParameters:
+        """Parameters satisfying contraction_constant < 1 for steady uniqueness."""
+        return cls(alpha=0.15, D_p=0.08, D_v=0.12)
 
 
 @dataclass

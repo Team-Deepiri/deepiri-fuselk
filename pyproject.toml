@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "deepiri-fuselk"
-version = "0.4.0"
+version = "0.5.0"
 description = "Fusion Unified Simulation, ELM Learning & Kinetics — open tokamak plasma control platform"
 authors = ["Deepiri <research@deepiri.ai>"]
 readme = "README.md"
@@ -23,7 +23,7 @@ classifiers = [
 packages = [{ include = "deepiri_fuselk", from = "src" }]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.14"
 numpy = "^1.26"
 scipy = "^1.12"
 xarray = "^2024.1"
@@ -68,6 +68,12 @@ torch = "^2.2"
 optional = true
 [tool.poetry.group.rl.dependencies]
 # SB3 now in main deps; group kept for optional torch extras later
+
+[tool.poetry.group.desktop]
+optional = true
+[tool.poetry.group.desktop.dependencies]
+PySide6 = "^6.6"
+PySide6-Addons = "^6.6"
 
 [tool.poetry.scripts]
 fuselk = "deepiri_fuselk.cli:app"

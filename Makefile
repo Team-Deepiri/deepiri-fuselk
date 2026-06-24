@@ -25,3 +25,6 @@ docker:
 
 doctor:
 	poetry run fuselk doctor
+
+gui:
+	poetry run fuselk gui

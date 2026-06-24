@@ -29,6 +29,8 @@ app.add_typer(reactor_app, name="reactor")
 experiments_app = typer.Typer(help="Run catalog experiments")
 app.add_typer(experiments_app, name="experiments")
 app.add_typer(viz_app, name="viz")
+validate_app = typer.Typer(help="Validate rigor claims (PDE, muon, RL, HQRM)")
+app.add_typer(validate_app, name="validate")
 
 
 @app.command()
@@ -236,6 +238,50 @@ def viz_serve(host: str = "127.0.0.1", port: int = 8050) -> None:
     from deepiri_fuselk.viz.dashboard.app import create_app
 
     create_app().run_server(host=host, port=port, debug=False)
+
+
+@app.command("gui")
+def gui_launch(
+    host: str = typer.Option("127.0.0.1", "--host"),
+    dash_port: int = typer.Option(8050, "--dash-port"),
+    api_port: int = typer.Option(8765, "--api-port"),
+) -> None:
+    """Launch the PySide6 desktop control room (Dash + native tools)."""
+    from deepiri_fuselk.viz.desktop.app import run_desktop_gui
+
+    run_desktop_gui(dash_port=dash_port, api_port=api_port, host=host)
+
+
+@validate_app.command("claims")
+def validate_claims(
+    pde: bool = typer.Option(False, "--pde"),
+    muon: bool = typer.Option(False, "--muon"),
+    rl: bool = typer.Option(False, "--rl"),
+    hqrm: bool = typer.Option(False, "--hqrm"),
+    all_claims: bool = typer.Option(False, "--all"),
+) -> None:
+    """Validate existence/uniqueness, muon rates, RL convergence, JAX HQRM latency."""
+    script = Path(__file__).resolve().parents[3] / "scripts" / "validate_claims.py"
+    cmd = [sys.executable, str(script)]
+    if all_claims or not any([pde, muon, rl, hqrm]):
+        cmd.append("--all")
+    else:
+        if pde:
+            cmd.append("--pde")
+        if muon:
+            cmd.append("--muon")
+        if rl:
+            cmd.append("--rl")
+        if hqrm:
+            cmd.append("--hqrm")
+    out = subprocess.check_output(cmd, text=True)
+    console.print(out)
+    data = json.loads(out)
+    if data.get("_all_passed"):
+        console.print("[green]All rigor claims passed.[/green]")
+    else:
+        console.print("[yellow]Some claims need attention — see report above.[/yellow]")
+        raise typer.Exit(code=1)
 
 
 def main() -> None:

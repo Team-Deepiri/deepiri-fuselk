@@ -33,18 +33,22 @@ Diagnostics ──► HELIX Engine ──► Focal Heat Map ──► Venturi Co
 | **Oil-Water** | Coupled plasma/vapor PDEs, tritium breeding, Peclet extraction |
 | **Muon** | Rate network, photon/proton stripping, tritium capsule |
 | **Digital Twin** | End-to-end shot replay with IMAS-compatible data |
-| **Control Room** | Multi-panel Dash dashboard + Three.js tokamak viewer |
+| **Control Room** | PySide6 desktop shell + Dash dashboard + Three.js tokamak viewer |
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/Team-Deepiri/deepiri-fuselk.git
 cd deepiri-fuselk
-poetry install
+./setup.sh              # system deps + poetry install (desktop group)
+./setup.sh --run        # install and launch PySide6 control room
 
+# Or manually:
+poetry install --with desktop
 fuselk doctor
+fuselk gui              # desktop shell (Dash + native tools)
+fuselk viz sim          # browser-only dashboard → http://127.0.0.1:8050
 fuselk sim fusion --steps 50
-fuselk viz sim          # live FusionCell dashboard → http://127.0.0.1:8050
 fuselk experiments list
 ```
 
@@ -75,7 +79,7 @@ src/deepiri_fuselk/
 ├── muon/         Rate network, stripping, tritium capsule
 ├── control/      Venturi controller, traffic router, RL env, watchdog
 ├── sim/          Digital twin, SOLPS wrapper, synthetic data
-└── viz/          Control room dashboard, Three.js viewer
+└── viz/          Control room dashboard, PySide6 desktop shell, Three.js viewer
 ```
 
 ## Development

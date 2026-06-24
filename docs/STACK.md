@@ -48,6 +48,7 @@ Future integrations (optional groups in `pyproject.toml`):
 | **ZeroMQ + PyArrow** | Diagnostic pub/sub bus (numpy serialization) |
 | **FastAPI + uvicorn** | REST hooks for remote control room |
 | **Dash + Plotly** | 6-panel control room dashboard |
+| **PySide6 + Qt WebEngine** | Native desktop shell embedding Dash + Three.js |
 | **Three.js** | Browser tokamak / field-line viewer |
 
 ## Visualization Philosophy
@@ -86,6 +87,7 @@ experiments/ YAML registry + Python runners
 
 ```bash
 poetry install                    # core: sim + ML + viz
+poetry install --with desktop     # PySide6 control room
 poetry install --with jax         # GPU HQRM kernels
 poetry install --with torch       # explicit torch (SB3 already pulls it)
 ```

@@ -4,52 +4,106 @@
   <meta charset="UTF-8" />
   <title>fuselk Tokamak Viewer</title>
   <style>
-    body { margin: 0; background: #0a0a12; color: #eee; font-family: sans-serif; }
-  #info { position: absolute; top: 10px; left: 10px; z-index: 10; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(ellipse at 50% 30%, #141a2e 0%, #080a10 70%);
+      color: #e8ecf4;
+      font-family: system-ui, sans-serif;
+      overflow: hidden;
+    }
+    #hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      background: rgba(16, 20, 31, 0.82);
+      border: 1px solid #2a3348;
+      border-radius: 10px;
+      padding: 12px 16px;
+      backdrop-filter: blur(6px);
+      min-width: 220px;
+    }
+    #hud h2 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+    #hud p { margin: 0; font-size: 11px; color: #7a8aaa; }
+    #legend { margin-top: 10px; font-size: 11px; line-height: 1.7; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   </style>
 </head>
 <body>
-  <div id="info">
-    <h2>deepiri-fuselk</h2>
-    <p>3D tokamak cross-section · field line overlay</p>
+  <div id="hud">
+    <h2>deepiri-fuselk Tokamak</h2>
+    <p>3D cross-section · field line overlay · live O-point</p>
+    <div id="legend">
+      <div><span class="dot" style="background:#4488ff"></span>Vessel (wireframe)</div>
+      <div><span class="dot" style="background:#ff6622"></span>Plasma core</div>
+      <div><span class="dot" style="background:#ff3344"></span>HELIX O-point lock</div>
+    </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x0a0a12);
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
     document.body.appendChild(renderer.domElement);
 
+    const ambient = new THREE.AmbientLight(0x334466, 0.6);
+    scene.add(ambient);
+    const key = new THREE.PointLight(0x88aaff, 1.2, 40);
+    key.position.set(4, 3, 6);
+    scene.add(key);
+
     const torus = new THREE.Mesh(
-      new THREE.TorusGeometry(3, 1, 16, 100),
-      new THREE.MeshBasicMaterial({ color: 0x4488ff, wireframe: true })
+      new THREE.TorusGeometry(3, 1, 20, 120),
+      new THREE.MeshBasicMaterial({ color: 0x4488ff, wireframe: true, transparent: true, opacity: 0.75 })
     );
     scene.add(torus);
 
     const plasma = new THREE.Mesh(
-      new THREE.SphereGeometry(0.8, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.6 })
+      new THREE.SphereGeometry(0.85, 40, 40),
+      new THREE.MeshPhongMaterial({ color: 0xff5522, emissive: 0x441100, transparent: true, opacity: 0.72, shininess: 80 })
     );
     scene.add(plasma);
 
-    const oPoint = new THREE.Mesh(
-      new THREE.SphereGeometry(0.15, 16, 16),
-      new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(1.05, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.12 })
     );
-    oPoint.position.set(2.5, 0.3, 0);
+    scene.add(glow);
+
+    const oPoint = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xff2244 })
+    );
     scene.add(oPoint);
 
-    camera.position.z = 8;
-    function animate() {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.28, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff4466, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+    );
+    oPoint.add(ring);
+
+    camera.position.set(0, 1.2, 8.5);
+    camera.lookAt(0, 0, 0);
+
+    let t0 = performance.now();
+    function animate(now) {
       requestAnimationFrame(animate);
-      torus.rotation.y += 0.005;
-      oPoint.position.x = 2.5 * Math.cos(Date.now() * 0.001);
-      oPoint.position.y = 0.3 * Math.sin(Date.now() * 0.001);
+      const t = (now - t0) * 0.001;
+      torus.rotation.y += 0.004;
+      torus.rotation.x = Math.sin(t * 0.3) * 0.08;
+      plasma.scale.setScalar(1 + Math.sin(t * 2.2) * 0.04);
+      glow.scale.copy(plasma.scale).multiplyScalar(1.15);
+      oPoint.position.x = 2.45 * Math.cos(t * 1.1);
+      oPoint.position.y = 0.35 * Math.sin(t * 1.6);
+      oPoint.position.z = 0.2 * Math.sin(t * 0.9);
+      ring.lookAt(camera.position);
       renderer.render(scene, camera);
     }
-    animate();
+    animate(t0);
+
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();

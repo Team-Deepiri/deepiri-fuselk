@@ -57,7 +57,12 @@ def create_app() -> Dash:
                     _stat_card("Action", "stat-action", frame.action),
                 ],
             ),
-            dcc.Graph(id="kpi-strip", figure=build_kpi_strip(frame), config={"displayModeBar": False}),
+            dcc.Graph(
+                id="kpi-strip",
+                figure=build_kpi_strip(frame),
+                config={"displayModeBar": False},
+                style={"height": "220px"},
+            ),
             dcc.Graph(id="control-room", figure=build_control_room_figure(frame)),
             html.Div(
                 style={"display": "flex", "gap": "12px", "alignItems": "center", "marginTop": "12px"},
