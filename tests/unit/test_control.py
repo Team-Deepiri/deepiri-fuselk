@@ -3,7 +3,7 @@
 import numpy as np
 from deepiri_fuselk.control.plasma_traffic_router import PlasmaTrafficRouter
 from deepiri_fuselk.control.realtime_bus import RealtimeBus
-from deepiri_fuselk.control.rl_agent import train_random_baseline
+from deepiri_fuselk.control.rl_agent import train_random_baseline, train_vent_policy
 from deepiri_fuselk.control.vent_circularizer_env import VentCircularizerEnv
 from deepiri_fuselk.control.watchdog import SafetyWatchdog
 
@@ -32,13 +32,25 @@ def test_watchdog_triggers_on_high_flux():
     assert action.override is True
 
 
-def test_realtime_bus_publish():
-    bus = RealtimeBus()
-    frames = bus.subscribe("diagnostics")
-    bus.publish("diagnostics/ece", np.array([1.0, 2.0]))
-    assert len(frames) == 1
+def test_realtime_bus_zmq_inproc():
+    pub = RealtimeBus(inproc=True)
+    sub = RealtimeBus(inproc=True)
+    pub.start_publisher()
+    sub.start_subscriber(topics=["diagnostics"])
+    pub.publish("diagnostics/ece", np.array([1.0, 2.0, 3.0]))
+    frame = sub.recv(timeout_ms=500)
+    assert frame is not None
+    assert frame.payload.shape == (3,)
+    pub.close()
+    sub.close()
 
 
 def test_rl_baseline_runs():
     mean_reward = train_random_baseline(episodes=2, steps=10)
     assert isinstance(mean_reward, float)
+
+
+def test_ppo_train_short():
+    r = train_vent_policy(timesteps=512, grid_size=8)
+    assert r.timesteps == 512
+    assert r.policy_path is not None
