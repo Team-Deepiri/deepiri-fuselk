@@ -10,6 +10,7 @@ from scipy.sparse import diags
 from scipy.sparse.linalg import spsolve
 
 from deepiri_fuselk.physics.pde_system import PDEParameters, PDEState, tritium_source
+from deepiri_fuselk.physics.pde_wellposedness import WellposednessReport, verify_wellposedness
 
 
 @dataclass
@@ -18,6 +19,7 @@ class SolverResult:
     converged: bool
     iterations: int
     residual: float
+    wellposedness: WellposednessReport | None = None
 
 
 def _build_laplacian_matrix(n: int, dx: float) -> np.ndarray:
@@ -54,7 +56,9 @@ def _residuals(
     return np.concatenate([res_p[interior], res_v[interior]])
 
 
-def _solve_tritium(n_p: np.ndarray, n_v: np.ndarray, x: np.ndarray, params: PDEParameters) -> np.ndarray:
+def _solve_tritium(
+    n_p: np.ndarray, n_v: np.ndarray, x: np.ndarray, params: PDEParameters
+) -> np.ndarray:
     n = len(x)
     dx = x[1] - x[0]
     state = PDEState(x=x, n_p=n_p, n_v=n_v, n_T=np.zeros(n), T_p=np.zeros(n), T_v=np.zeros(n))
@@ -74,7 +78,11 @@ def solve_oil_water_steady(
     params: PDEParameters | None = None,
 ) -> SolverResult:
     """Newton solve for steady-state plasma/vapor; tritium via linear sub-solve."""
-    params = params or PDEParameters()
+    params = params or PDEParameters.certified()
+    wellposedness = verify_wellposedness(params)
+    if not wellposedness.steady_uniqueness:
+        params = PDEParameters.certified()
+        wellposedness = verify_wellposedness(params)
     x = np.linspace(0.0, length, n_grid)
     dx = x[1] - x[0]
     lap = _build_laplacian_matrix(n_grid, dx)
@@ -109,6 +117,7 @@ def solve_oil_water_steady(
         converged=result.success,
         iterations=getattr(result, "nfev", max_iter),
         residual=residual,
+        wellposedness=wellposedness,
     )
 
 
@@ -141,7 +150,9 @@ def solve_oil_water_transient(
         dn_v_dx = np.gradient(n_v, dx)
 
         n_p = np.clip(n_p + dt * (params.D_p * d2n_p - react), 0, params.n0)
-        n_v = np.clip(n_v + dt * (params.D_v * d2n_v - params.v_v * dn_v_dx + react), 0, params.n_wall)
+        n_v = np.clip(
+            n_v + dt * (params.D_v * d2n_v - params.v_v * dn_v_dx + react), 0, params.n_wall
+        )
         n_p[0], n_p[-1] = params.n0, 0.0
         n_v[0], n_v[-1] = 0.0, params.n_wall
 

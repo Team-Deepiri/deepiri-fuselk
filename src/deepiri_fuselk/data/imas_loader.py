@@ -45,9 +45,21 @@ def load_imas_hdf5(path: str | Path) -> IMASShot:
         heat = np.array(f["ece/heat_field"]) if "ece/heat_field" in f else np.array(f["heat_field"])
 
         profiles_grp = f["profiles"] if "profiles" in f else f
-        ne = _profile_from_h5(profiles_grp, "ne") if "ne" in profiles_grp or "ne/rho" in profiles_grp else None
-        Te = _profile_from_h5(profiles_grp, "Te") if "Te" in profiles_grp or "Te/rho" in profiles_grp else None
-        q = _profile_from_h5(profiles_grp, "q") if "q" in profiles_grp or "q/rho" in profiles_grp else None
+        ne = (
+            _profile_from_h5(profiles_grp, "ne")
+            if "ne" in profiles_grp or "ne/rho" in profiles_grp
+            else None
+        )
+        Te = (
+            _profile_from_h5(profiles_grp, "Te")
+            if "Te" in profiles_grp or "Te/rho" in profiles_grp
+            else None
+        )
+        q = (
+            _profile_from_h5(profiles_grp, "q")
+            if "q" in profiles_grp or "q/rho" in profiles_grp
+            else None
+        )
         rot = (
             _profile_from_h5(profiles_grp, "omega")
             if "omega" in profiles_grp or "omega/rho" in profiles_grp

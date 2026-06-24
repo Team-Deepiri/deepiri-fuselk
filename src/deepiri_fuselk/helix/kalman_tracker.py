@@ -61,11 +61,13 @@ class PhaseLockedTracker:
         amplitude: float,
     ) -> TrackerState:
         z = np.array([measurement_theta, measurement_phi, amplitude])
-        H = np.array([
-            [1, 0, 0, 0],
-            [0, 0, 0, 1],
-            [0, 0, 1, 0],
-        ])
+        H = np.array(
+            [
+                [1, 0, 0, 0],
+                [0, 0, 0, 1],
+                [0, 0, 1, 0],
+            ]
+        )
         y = z - H @ self.x
         y[0] = (y[0] + np.pi) % (2 * np.pi) - np.pi
         y[1] = (y[1] + np.pi) % (2 * np.pi) - np.pi

@@ -1,137 +1,189 @@
-"""Rich multi-panel fuselk control room dashboard."""
+"""Rich multi-panel fuselk control room with live simulation."""
 
 from __future__ import annotations
 
-import plotly.graph_objects as go
-from dash import Dash, dcc, html
-from deepiri_fuselk.helix.helix_engine import HelixEngine
-from deepiri_fuselk.models.elm_predictor import ELMPredictor
-from deepiri_fuselk.sim.synthetic_data_gen import generate_ece_shot
-from deepiri_fuselk.viz.traffic_viewer import traffic_arrows
-from plotly.subplots import make_subplots
+from pathlib import Path
 
+from dash import Dash, Input, Output, State, dcc, html
+from deepiri_fuselk.viz.dashboard.figures import build_control_room_figure, build_kpi_strip
+from deepiri_fuselk.viz.simulation_engine import LiveSimulation
 
-def _make_control_room_figure(seed: int = 0):
-    shot = generate_ece_shot(32, seed=seed)
-    engine = HelixEngine()
-    result = engine.process(shot.heat_field, shot.raw_signal, shot.angles)
-    predictor = ELMPredictor()
-    elm = predictor.predict(result.focal_map, result.rotation_hz)
-    arrows = traffic_arrows(shot.heat_field)
-
-    fig = make_subplots(
-        rows=2,
-        cols=3,
-        subplot_titles=(
-            "Raw ECE (noisy)",
-            "HELIX Focal Map",
-            "HQRM O-Point Lock",
-            "ELM Probability",
-            "Divertor Traffic",
-            "Fracture Vector",
-        ),
-        specs=[
-            [{"type": "heatmap"}, {"type": "heatmap"}, {"type": "scatter"}],
-            [{"type": "indicator"}, {"type": "scatter"}, {"type": "scatter"}],
-        ],
-    )
-
-    fig.add_trace(go.Heatmap(z=shot.heat_field, colorscale="Hot", showscale=False), row=1, col=1)
-    fig.add_trace(
-        go.Heatmap(z=result.focal_map, colorscale="Viridis", showscale=False), row=1, col=2
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=[result.o_point[0]],
-            y=[result.o_point[1]],
-            mode="markers",
-            marker={"size": 15, "color": "red", "symbol": "x"},
-            name="O-point",
-        ),
-        row=1,
-        col=3,
-    )
-    fig.add_trace(
-        go.Indicator(
-            mode="gauge+number",
-            value=elm.probability * 100,
-            title={"text": "ELM %"},
-            gauge={
-                "axis": {"range": [0, 100]},
-                "bar": {"color": "red" if elm.probability > 0.5 else "green"},
-            },
-        ),
-        row=2,
-        col=1,
-    )
-    if arrows:
-        fig.add_trace(
-            go.Scatter(
-                x=[a["x"] for a in arrows],
-                y=[a["y"] for a in arrows],
-                mode="markers",
-                marker={
-                    "size": 8,
-                    "color": [a["magnitude"] for a in arrows],
-                    "colorscale": "YlOrRd",
-                },
-                name="traffic",
-            ),
-            row=2,
-            col=2,
-        )
-    fig.add_trace(
-        go.Scatter(
-            x=[0, result.fracture_vector[0]],
-            y=[0, result.fracture_vector[1]],
-            mode="lines+markers",
-            line={"color": "orange", "width": 3},
-            name="fracture",
-        ),
-        row=2,
-        col=3,
-    )
-    fig.update_layout(height=700, showlegend=False, title_text="fuselk Control Room")
-    return fig, elm, result
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+_sim = LiveSimulation(grid_size=24)
 
 
 def create_app() -> Dash:
-    """Create the full fuselk control room dashboard."""
-    fig, elm, result = _make_control_room_figure()
+    """Create the full fuselk control room with live FusionCell simulation."""
+    frame = _sim.reset(seed=0)
 
-    app = Dash(__name__)
+    app = Dash(
+        __name__,
+        suppress_callback_exceptions=True,
+        assets_folder=str(_STATIC),
+    )
     app.layout = html.Div(
-        style={"fontFamily": "sans-serif", "padding": "20px"},
+        style={
+            "fontFamily": "system-ui, sans-serif",
+            "padding": "16px",
+            "backgroundColor": "#0f1117",
+            "color": "#e8e8e8",
+            "minHeight": "100vh",
+        },
         children=[
-            html.H1("deepiri-fuselk Control Room"),
-            html.P(
-                "HELIX focal diagnostics · Venturi control · ELM prediction · Plasma traffic routing",
-                style={"color": "#666"},
+            html.Header(
+                style={
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "14px",
+                    "marginBottom": "4px",
+                },
+                children=[
+                    html.Img(
+                        src="/assets/branding/deepiri_logo.png",
+                        alt="Deepiri",
+                        style={"height": "44px", "width": "44px"},
+                    ),
+                    html.Div(
+                        children=[
+                            html.H1(
+                                "deepiri-fuselk Control Room",
+                                style={"margin": "0 0 4px 0", "color": "#fff"},
+                            ),
+                            html.P(
+                                "Live FusionCell simulation · HELIX · Venturi · ELM/disruption · fuel & muon cycle",
+                                style={"margin": 0, "color": "#888"},
+                            ),
+                        ],
+                    ),
+                ],
             ),
             html.Div(
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "1fr 1fr 1fr",
-                    "gap": "10px",
-                    "marginBottom": "20px",
+                    "gridTemplateColumns": "repeat(4, 1fr)",
+                    "gap": "12px",
+                    "margin": "16px 0",
                 },
                 children=[
-                    html.Div(
-                        [
-                            html.H4("O-Point"),
-                            html.P(f"({result.o_point[0]:.3f}, {result.o_point[1]:.3f})"),
-                        ]
+                    _stat_card("Step", "stat-step", f"{frame.step}"),
+                    _stat_card(
+                        "O-Point",
+                        "stat-opoint",
+                        f"({frame.helix.o_point[0]:.2f}, {frame.helix.o_point[1]:.2f})",
                     ),
-                    html.Div([html.H4("SNR Gain"), html.P(f"{result.phase_locked_snr:.1f}x")]),
-                    html.Div([html.H4("ELM Mode"), html.P(elm.precursor_mode)]),
+                    _stat_card("SNR", "stat-snr", f"{frame.helix.phase_locked_snr:.1f}x"),
+                    _stat_card("Action", "stat-action", frame.action),
                 ],
             ),
-            dcc.Graph(figure=fig, id="control-room"),
-            dcc.Interval(id="interval", interval=5000, n_intervals=0),
+            dcc.Graph(
+                id="kpi-strip",
+                figure=build_kpi_strip(frame),
+                config={"displayModeBar": False},
+                style={"height": "220px"},
+            ),
+            dcc.Graph(id="control-room", figure=build_control_room_figure(frame)),
+            html.Div(
+                style={
+                    "display": "flex",
+                    "gap": "12px",
+                    "alignItems": "center",
+                    "marginTop": "12px",
+                },
+                children=[
+                    html.Button(
+                        "Reset simulation",
+                        id="btn-reset",
+                        n_clicks=0,
+                        style=_button_style(),
+                    ),
+                    html.Label("Update interval (ms): ", style={"marginLeft": "8px"}),
+                    dcc.Input(
+                        id="interval-ms",
+                        type="number",
+                        value=2000,
+                        min=500,
+                        max=10000,
+                        step=500,
+                        style={"width": "80px", "marginLeft": "4px"},
+                    ),
+                    html.A(
+                        "Open 3D Tokamak Viewer",
+                        href="/assets/tokamak_viewer.html",
+                        target="_blank",
+                        style={"marginLeft": "auto", "color": "#66aaff"},
+                    ),
+                ],
+            ),
+            dcc.Interval(id="interval", interval=2000, n_intervals=0),
             html.Footer(
-                "deepiri-fuselk — Fusion Unified Simulation, ELM Learning & Kinetics",
-                style={"marginTop": "20px", "color": "#999", "fontSize": "12px"},
+                "deepiri-fuselk v0.4 — Fusion Unified Simulation, ELM Learning & Kinetics",
+                style={"marginTop": "24px", "color": "#555", "fontSize": "12px"},
             ),
         ],
     )
+
+    @app.callback(
+        Output("interval", "interval"),
+        Input("interval-ms", "value"),
+    )
+    def set_interval(ms: int | None) -> int:
+        return max(500, int(ms or 2000))
+
+    @app.callback(
+        Output("control-room", "figure"),
+        Output("kpi-strip", "figure"),
+        Output("stat-step", "children"),
+        Output("stat-opoint", "children"),
+        Output("stat-snr", "children"),
+        Output("stat-action", "children"),
+        Input("interval", "n_intervals"),
+        Input("btn-reset", "n_clicks"),
+        State("interval", "n_intervals"),
+        prevent_initial_call=False,
+    )
+    def tick(n_intervals: int, reset_clicks: int, _prev: int):
+        from dash import callback_context
+
+        ctx = callback_context
+        if ctx.triggered and ctx.triggered[0]["prop_id"].startswith("btn-reset"):
+            frame = _sim.reset(seed=int(reset_clicks or 0))
+        else:
+            frame = _sim.step()
+        op = f"({frame.helix.o_point[0]:.2f}, {frame.helix.o_point[1]:.2f})"
+        return (
+            build_control_room_figure(frame),
+            build_kpi_strip(frame),
+            str(frame.step),
+            op,
+            f"{frame.helix.phase_locked_snr:.1f}x",
+            frame.action,
+        )
+
     return app
+
+
+def _stat_card(title: str, elem_id: str, value: str) -> html.Div:
+    return html.Div(
+        style={
+            "background": "#1a1d27",
+            "borderRadius": "8px",
+            "padding": "12px 16px",
+            "border": "1px solid #2a2d37",
+        },
+        children=[
+            html.H4(title, style={"margin": "0 0 4px 0", "fontSize": "12px", "color": "#888"}),
+            html.P(value, id=elem_id, style={"margin": 0, "fontSize": "18px", "fontWeight": 600}),
+        ],
+    )
+
+
+def _button_style() -> dict:
+    return {
+        "background": "#4488ff",
+        "color": "#fff",
+        "border": "none",
+        "borderRadius": "6px",
+        "padding": "8px 16px",
+        "cursor": "pointer",
+        "fontWeight": 600,
+    }

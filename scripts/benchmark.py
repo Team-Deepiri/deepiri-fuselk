@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end fuselk benchmark — replaces notebook tutorials."""
+"""End-to-end fuselk benchmark — complements notebooks/ tutorials."""
 
 from __future__ import annotations
 
@@ -74,6 +74,36 @@ def bench_twin(steps: int = 50) -> dict:
     return summary
 
 
+def bench_reactor(steps: int = 30) -> dict:
+    from deepiri_fuselk.sim.reactor_cell import ReactorCell
+
+    t0 = time.perf_counter()
+    cell = ReactorCell(grid_size=16, train_elm=False)
+    run = cell.run(n_steps=steps, seed=42)
+    elapsed = time.perf_counter() - t0
+    report = run.to_report()
+    report["elapsed_s"] = elapsed
+    report["fusion_score"] = run.final_score
+    return report
+
+
+def bench_elm(n_shots: int = 150) -> dict:
+    from deepiri_fuselk.models.elm_predictor import ELMPredictor
+    from deepiri_fuselk.sim.shot_corpus import generate_corpus
+
+    t0 = time.perf_counter()
+    corpus = generate_corpus(n_shots=n_shots, grid_size=16, seed=7)
+    model = ELMPredictor()
+    acc = model.train_from_corpus(corpus)
+    elapsed = time.perf_counter() - t0
+    return {
+        "train_accuracy": acc,
+        "corpus_size": n_shots,
+        "elm_rate": corpus.elm_rate,
+        "elapsed_s": elapsed,
+    }
+
+
 def bench_rl(timesteps: int = 5000) -> dict:
     from deepiri_fuselk.control.rl_agent import train_random_baseline, train_vent_policy
 
@@ -90,6 +120,13 @@ def bench_rl(timesteps: int = 5000) -> dict:
     }
 
 
+def bench_vision() -> dict:
+    from deepiri_fuselk.sim.vision_alignment import audit_vision_alignment
+
+    report = audit_vision_alignment(skip_slow=True)
+    return report.to_dict()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="fuselk benchmark suite")
     parser.add_argument("--all", action="store_true")
@@ -97,12 +134,18 @@ def main() -> int:
     parser.add_argument("--helix", action="store_true")
     parser.add_argument("--muon", action="store_true")
     parser.add_argument("--twin", action="store_true")
+    parser.add_argument("--reactor", action="store_true")
+    parser.add_argument("--elm", action="store_true")
     parser.add_argument("--rl", action="store_true")
+    parser.add_argument("--vision", action="store_true")
     parser.add_argument("--rl-steps", type=int, default=5000)
     parser.add_argument("--twin-steps", type=int, default=50)
+    parser.add_argument("--reactor-steps", type=int, default=30)
     args = parser.parse_args()
 
-    run_all = args.all or not any([args.physics, args.helix, args.muon, args.twin, args.rl])
+    run_all = args.all or not any(
+        [args.physics, args.helix, args.muon, args.twin, args.reactor, args.elm, args.rl, args.vision]
+    )
     results = {}
 
     if run_all or args.physics:
@@ -113,8 +156,14 @@ def main() -> int:
         results["muon"] = bench_muon()
     if run_all or args.twin:
         results["twin"] = bench_twin(args.twin_steps)
+    if run_all or args.reactor:
+        results["reactor"] = bench_reactor(args.reactor_steps)
+    if run_all or args.elm:
+        results["elm"] = bench_elm()
     if run_all or args.rl:
         results["rl"] = bench_rl(args.rl_steps)
+    if run_all or args.vision:
+        results["vision"] = bench_vision()
 
     print(json.dumps(results, indent=2))
     return 0
