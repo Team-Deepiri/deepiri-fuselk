@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 from deepiri_fuselk.data.fetchers import run_fetch
+from deepiri_fuselk.data.imas_loader import load_imas_hdf5
 from deepiri_fuselk.data.notebook_loaders import (
     ensure_fetched_data,
     imas_to_synthetic_shot,
@@ -15,7 +15,6 @@ from deepiri_fuselk.data.notebook_loaders import (
     load_shot_by_id,
     manifest_summary,
 )
-from deepiri_fuselk.data.imas_loader import load_imas_hdf5
 
 
 def test_notebook_loaders_on_fetched_data(tmp_path: Path):
