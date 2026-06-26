@@ -41,9 +41,9 @@ SETUP = """\
 import sys
 from pathlib import Path
 
-repo = Path.cwd()
-if not (repo / "src" / "deepiri_fuselk").exists() and (repo.parent / "src" / "deepiri_fuselk").exists():
-    repo = repo.parent
+from deepiri_fuselk.data.notebook_loaders import resolve_repo_root
+
+repo = resolve_repo_root()
 
 try:
     import deepiri_fuselk  # noqa: F401
@@ -56,6 +56,32 @@ import numpy as np
 
 plt.style.use("seaborn-v0_8-whitegrid")
 %config InlineBackend.figure_formats = ["retina"]
+"""
+
+DATA_BOOTSTRAP = """\
+from deepiri_fuselk.data.imas_loader import load_imas_hdf5
+from deepiri_fuselk.data.notebook_loaders import (
+    ensure_fetched_data,
+    imas_to_synthetic_shot,
+    list_shots,
+    load_corpus_arrays,
+    load_odl_meta,
+    manifest_summary,
+    resolve_data_root,
+)
+
+data_root = ensure_fetched_data(resolve_data_root(repo), n_shots=100, max_odl=50)
+cmod_shots = list_shots(data_root, source="cmod")
+syn_shots = list_shots(data_root, source="synthetic")
+corpus = load_corpus_arrays(data_root)
+manifest = manifest_summary(data_root)
+
+print(f"Data lake: {data_root}")
+print(f"  C-Mod (ODL) shots: {len(cmod_shots)}")
+print(f"  Synthetic shots:   {len(syn_shots)}")
+print(f"  ELM corpus frames: {len(corpus['labels'])} (elm_rate={corpus['elm_rate']:.2f})")
+for row in manifest:
+    print(f"  [{row['source']}] {row['status']} — {row['shots']} shots @ {row['fetched_at'][:19]}")
 """
 
 
@@ -97,9 +123,48 @@ Diagnostics → HELIX/HQRM → Focal Heat Map → ELM Predictor → Venturi Cont
 ```
 
 Each module is a Python package under `src/deepiri_fuselk/`. Experiments are registered in `experiments/registry.yaml`.
+
+See [docs/DATA_PIPELINE.md](../docs/DATA_PIPELINE.md) for the full ingest story: MIT Open Density Limit CSV → normalized C-Mod HDF5 shots, plus synthetic `elm_corpus.npz` for training.
 """
         ),
         code(SETUP + "\nimport deepiri_fuselk as fuselk\nprint(f'fuselk v{fuselk.__version__}')"),
+        md("## Data lake — real shots from `fuselk data fetch`"),
+        code(DATA_BOOTSTRAP),
+        code(
+            """\
+# Peek at one real Alcator C-Mod discharge (MIT Open Density Limit DB)
+cmod_path = cmod_shots[0]
+cmod = load_imas_hdf5(cmod_path)
+odl = load_odl_meta(cmod_path)
+
+print(f"Shot {cmod.shot_id} on {cmod.device}")
+print(f"  ne core: {cmod.ne_profile.values[0]:.2e} m⁻³")
+print(f"  q edge:  {cmod.q_profile.values[-1]:.2f}")
+if odl:
+    print(f"  ODL density-limit phase rate: {odl['elm_event_rate']:.2%}")
+    print(f"  Time points: {len(odl['density_limit_phase'])}")
+
+fig, axes = plt.subplots(1, 3, figsize=(14, 3.5))
+axes[0].plot(cmod.ne_profile.radius, cmod.ne_profile.values, label="n_e")
+axes[0].plot(cmod.Te_profile.radius, np.array(cmod.Te_profile.values) / 1e3, label="T_e [keV]")
+axes[0].legend(); axes[0].set_xlabel("ρ"); axes[0].set_title("Fetched profiles")
+
+axes[1].imshow(cmod.heat_field, origin="lower", cmap="inferno")
+axes[1].set_title("ECE heat field (HELIX input)")
+
+if odl and odl.get("time") is not None:
+    axes[2].plot(odl["time"], odl["density"], label="line-averaged n")
+    ax2 = axes[2].twinx()
+    ax2.plot(odl["time"], odl["density_limit_phase"], "r.", alpha=0.5, label="DL phase")
+    axes[2].set_xlabel("time [s]"); axes[2].legend(loc="upper left")
+else:
+    axes[2].text(0.5, 0.5, "no ODL trace", ha="center", va="center", transform=axes[2].transAxes)
+axes[2].set_title("ODL precursor labels")
+
+plt.tight_layout()
+plt.show()
+"""
+        ),
         code(
             """\
 registry_path = Path("experiments/registry.yaml")
@@ -112,26 +177,30 @@ for line in registry_path.read_text().splitlines():
         print(f"  • {exp_id}")
 """
         ),
-        md("## Quick smoke test — all pillars in one cell"),
+        md("## Quick smoke test — all pillars on real + synthetic data"),
         code(
             """\
 from deepiri_fuselk.helix import HelixEngine
 from deepiri_fuselk.muon import RateNetworkParams, run_rate_network
 from deepiri_fuselk.physics import PDEParameters, peclet_criterion, solve_oil_water_steady
-from deepiri_fuselk.sim import ReactorCell, generate_ece_shot
+from deepiri_fuselk.sim import ReactorCell
 
 params = PDEParameters()
 steady = solve_oil_water_steady(n_grid=32, params=params)
-shot = generate_ece_shot(24, seed=0)
-helix = HelixEngine().process(shot.heat_field, shot.raw_signal, shot.angles)
+
+# Real C-Mod heat field through HELIX (not synthetic generator)
+ece = imas_to_synthetic_shot(cmod)
+helix = HelixEngine().process(ece.heat_field, ece.raw_signal, ece.angles)
+
 muon = run_rate_network(params=RateNetworkParams(R_photon=0.3), t_span=(0.0, 1e-5))
 cell = ReactorCell(grid_size=16, train_elm=False)
+cell.imas = cmod  # drive q/Te profiles from fetched shot
 run = cell.run(n_steps=5, seed=1)
 
-print(f\"PDE converged: {steady.converged}, Peclet Pe = {peclet_criterion(params):.2f}\")
-print(f\"HELIX SNR: {helix.phase_locked_snr:.2f}, ELM prob: {helix.elm_probability:.2f}\")
-print(f\"Muon fusions/μ: {muon.fusions_per_muon:.1f}, breakeven: {muon.breakeven}\")
-print(f\"Reactor fusion score: {run.final_score:.3f}\")
+print(f"PDE converged: {steady.converged}, Peclet Pe = {peclet_criterion(params):.2f}")
+print(f"HELIX SNR (C-Mod): {helix.phase_locked_snr:.2f}, ELM prob: {helix.elm_probability:.2f}")
+print(f"Muon fusions/μ: {muon.fusions_per_muon:.1f}, breakeven: {muon.breakeven}")
+print(f"Reactor fusion score (real profiles): {run.final_score:.3f}")
 """
         ),
     )
@@ -188,7 +257,7 @@ $$\\Gamma_T = -D_T n_T'(L) + v_v n_T(L)$$
 is **advection-dominated** at the wall. Hence $\\mathrm{Pe} = v_v \\delta / D_T > 1$ is the **necessary scale condition** for outward fuel extraction rather than core reflux — the key fuselk fuel-cycle closure criterion that OpenMC/IMAS do not model.
 """
         ),
-        code(SETUP),
+        code(SETUP + "\n" + DATA_BOOTSTRAP),
         code(
             """\
 from deepiri_fuselk.barrier.breeding_blanket import evaluate_breeding_blanket, tritium_breeding_ratio
@@ -291,6 +360,37 @@ plt.tight_layout()
 plt.show()
 """
         ),
+        md("## Real C-Mod density drives PDE boundary conditions"),
+        code(
+            """\
+# Scale oil–water PDE from fetched ne profiles across the ODL shot corpus
+from deepiri_fuselk.barrier.breeding_blanket import tritium_breeding_ratio
+
+discharge_pe, discharge_tbr, odl_rates = [], [], []
+for path in cmod_shots[:12]:
+    shot = load_imas_hdf5(path)
+    meta = load_odl_meta(path)
+    ne_edge = float(np.mean(shot.ne_profile.values[-3:]))
+    p = PDEParameters(n0=ne_edge * 1e-6, v_v=0.55)
+    res = solve_oil_water_steady(n_grid=64, params=p)
+    discharge_pe.append(peclet_criterion(p))
+    discharge_tbr.append(tritium_breeding_ratio(res.state, p))
+    odl_rates.append(meta["elm_event_rate"] if meta else 0.0)
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+axes[0].scatter(odl_rates, discharge_tbr, c=discharge_pe, cmap="plasma", s=60)
+axes[0].set_xlabel("ODL density-limit phase rate"); axes[0].set_ylabel("TBR")
+axes[0].set_title("Fuel cycle vs. experimental precursor labels")
+
+axes[1].hist(discharge_pe, bins=8, color="C0", alpha=0.8, label="Pe from C-Mod ne")
+axes[1].axvline(1.0, color="k", ls="--", label="Pe = 1 extraction threshold")
+axes[1].set_xlabel("Peclet number"); axes[1].legend()
+axes[1].set_title("Peclet distribution on real discharges")
+
+plt.tight_layout()
+plt.show()
+"""
+        ),
     )
 
 
@@ -343,14 +443,16 @@ $$\\mathrm{Var}(h_1,\\ldots,h_{49}) < 0.07$$
 **Interpretation:** Monte-Carlo dropout across 49 field-aligned patches — variance below 7% certifies a **crystalline O-point lock** (VISION novel contribution in computational geometry + signal processing).
 """
         ),
-        code(SETUP),
+        code(SETUP + "\n" + DATA_BOOTSTRAP),
         code(
             """\
 from deepiri_fuselk.focal.lockin_amplifier import lockin_demodulate, subtract_incoherent_noise
 from deepiri_fuselk.helix import HelixEngine, run_hqrm
 from deepiri_fuselk.sim import generate_ece_shot
 
-shot = generate_ece_shot(size=48, seed=7, island_amplitude=0.7)
+# Primary demo: real C-Mod ECE heat field from fetch pipeline
+cmod = load_imas_hdf5(cmod_shots[0])
+shot = imas_to_synthetic_shot(cmod)
 engine = HelixEngine(rotation_hz=5000.0)
 result = engine.process(shot.heat_field, shot.raw_signal, shot.angles)
 
@@ -358,10 +460,11 @@ amp, i_comp, q_comp = lockin_demodulate(
     shot.raw_signal, result.o_point[0], shot.angles
 )
 
-print(f\"Lock-in amplitude: {amp:.3f}  (I={i_comp:.3f}, Q={q_comp:.3f})\")
-print(f\"Phase-locked SNR: {result.phase_locked_snr:.2f}\")
-print(f\"HQRM converged: {result.hqrm.converged}, variance: {result.hqrm.heat_variance:.4f}\")
-print(f\"O-point: {result.o_point}, fracture vector: {result.fracture_vector}\")
+print(f"Device: {cmod.device}  shot: {cmod.shot_id}")
+print(f"Lock-in amplitude: {amp:.3f}  (I={i_comp:.3f}, Q={q_comp:.3f})")
+print(f"Phase-locked SNR: {result.phase_locked_snr:.2f}")
+print(f"HQRM converged: {result.hqrm.converged}, variance: {result.hqrm.heat_variance:.4f}")
+print(f"O-point: {result.o_point}, fracture vector: {result.fracture_vector}")
 """
         ),
         code(
@@ -386,7 +489,44 @@ plt.tight_layout()
 plt.show()
 """
         ),
-        md("## Experiment: SNR vs. island amplitude"),
+        md("## Real-shot corpus: HELIX SNR vs. ODL precursor labels"),
+        code(
+            """\
+snrs, labels, devices = [], [], []
+engine = HelixEngine()
+
+for path in cmod_shots:
+    imas = load_imas_hdf5(path)
+    ece = imas_to_synthetic_shot(imas)
+    hres = engine.process(ece.heat_field, ece.raw_signal, ece.angles)
+    meta = load_odl_meta(path)
+    snrs.append(hres.phase_locked_snr)
+    labels.append(meta["elm_event_rate"] if meta else 0.0)
+    devices.append(imas.shot_id)
+
+fig, ax = plt.subplots(figsize=(7, 4))
+sc = ax.scatter(labels, snrs, c=labels, cmap="coolwarm", s=70, edgecolors="k", linewidths=0.3)
+ax.set_xlabel("ODL density-limit phase rate"); ax.set_ylabel("HELIX phase-locked SNR")
+ax.set_title("Diagnostic lock quality on fetched C-Mod discharges")
+plt.colorbar(sc, label="label rate")
+plt.tight_layout()
+plt.show()
+
+# Compare one synthetic SYN shot side-by-side
+syn = load_imas_hdf5(syn_shots[0])
+syn_ece = imas_to_synthetic_shot(syn)
+syn_res = engine.process(syn_ece.heat_field, syn_ece.raw_signal, syn_ece.angles)
+
+fig, axes = plt.subplots(1, 2, figsize=(9, 4))
+axes[0].imshow(cmod.heat_field, origin="lower", cmap="inferno")
+axes[0].set_title(f"C-Mod {cmod.shot_id}\\nSNR={result.phase_locked_snr:.2f}")
+axes[1].imshow(syn.heat_field, origin="lower", cmap="inferno")
+axes[1].set_title(f"Synthetic {syn.shot_id}\\nSNR={syn_res.phase_locked_snr:.2f}")
+plt.tight_layout()
+plt.show()
+"""
+        ),
+        md("## Experiment: SNR vs. island amplitude (synthetic sweep)"),
         code(
             """\
 amplitudes = np.linspace(0.1, 1.0, 12)
@@ -526,7 +666,7 @@ Including sticking losses ($\\omega_0 \\approx 0.008$) and transport inefficienc
 | + Cyclotron resonance | 350+ |
 """
         ),
-        code(SETUP),
+        code(SETUP + "\n" + DATA_BOOTSTRAP),
         code(
             """\
 from deepiri_fuselk.muon import BREAKEVEN_FUSIONS, RateNetworkParams, run_rate_network
@@ -597,6 +737,38 @@ print(f\"Muon breakeven: {muon_ok}, Tritium self-sufficient: {fuel_ok}\")
 print(f\"Combined fuel-cycle readiness: {muon_ok and fuel_ok}\")
 """
         ),
+        md("## Real discharge density → PDE fuel-cycle context"),
+        code(
+            """\
+from deepiri_fuselk.muon.stripping_orchestrator import run_stripping_trifecta
+
+# Anchor blanket evaluation to mean ne from all fetched C-Mod shots
+ne_samples = [float(np.mean(load_imas_hdf5(p).ne_profile.values)) for p in cmod_shots]
+ne_mean = float(np.mean(ne_samples))
+
+p_real = PDEParameters(n0=ne_mean * 1e-6, v_v=0.6)
+pde_real = solve_oil_water_steady(n_grid=64, params=p_real)
+blanket_real = evaluate_breeding_blanket(pde_real.state, p_real)
+trifecta = run_stripping_trifecta()
+
+fig, ax = plt.subplots(figsize=(8, 4))
+bars = {
+    "TBR (C-Mod ne)": blanket_real.tritium_breeding_ratio,
+    "Pe": peclet_criterion(p_real),
+    "μ fusions/μ / 284": trifecta.projected_fpm / 284.0,
+    "ODL precursor rate": float(np.mean([load_odl_meta(p)["elm_event_rate"] for p in cmod_shots[:5]])),
+}
+ax.barh(list(bars.keys()), list(bars.values()), color=["C2", "C0", "C5", "C3"])
+ax.axvline(1.0, color="gray", ls="--")
+ax.set_xlim(0, 1.4)
+ax.set_title("Cross-domain fuel-cycle readiness on real density scale")
+plt.tight_layout()
+plt.show()
+
+print(f"Mean C-Mod ne: {ne_mean:.2e} m⁻³ → TBR={blanket_real.tritium_breeding_ratio:.3f}, Pe={peclet_criterion(p_real):.2f}")
+print(f"Trifecta μ breakeven={trifecta.breakeven}, combined ready={blanket_real.tritium_breeding_ratio >= 1 and trifecta.breakeven}")
+"""
+        ),
         md("## Stripping trifecta orchestrator"),
         code(
             """\
@@ -654,47 +826,69 @@ $$P_{dis} = \\mathrm{clip}\\big(0.45\\, P_{ELM} + 0.35\\, P_{MHD} + 0.2\\, P_{HE
 where $P_{MHD}$ derives from $(q_{min}, \\beta_N)$ stability margins — **cross-domain fusion of diagnostics, ML, and MHD** unique to fuselk.
 """
         ),
-        code(SETUP),
+        code(SETUP + "\n" + DATA_BOOTSTRAP),
         code(
             """\
 from deepiri_fuselk.control.venturi_controller import VenturiController
 from deepiri_fuselk.helix import HelixEngine
 from deepiri_fuselk.models.disruption_detector import DisruptionDetector
 from deepiri_fuselk.models.elm_predictor import ELMPredictor
-from deepiri_fuselk.sim import generate_ece_shot, generate_corpus
 
 venturi = VenturiController(engineering_limit=10.0)
-prior = venturi.slow_loop(ne_pedestal=0.9, beta_n=2.8, rotation_khz=5.5, q95=3.2)
 
-# 2D divertor heat-flux map (hotspot)
-x = np.linspace(-1, 1, 32)
-X, Y = np.meshgrid(x, x)
-heat_flux = 8.0 * np.exp(-(X**2 + Y**2) / 0.3)
-action = venturi.fast_loop(heat_flux, prior, elm_probability=0.75)
-state = venturi.step(heat_flux, elm_probability=0.75)
+# Slow loop priors from real C-Mod profiles
+cmod = load_imas_hdf5(cmod_shots[0])
+ne_ped = float(np.mean(cmod.ne_profile.values[:4]))
+beta_n = float(np.mean(cmod.Te_profile.values)) / 2000.0
+q95 = float(cmod.q_profile.values[-1])
+prior = venturi.slow_loop(ne_pedestal=ne_ped / 1e20, beta_n=beta_n, rotation_khz=5.5, q95=q95)
 
-print(f\"Prior max sweep: {prior.max_sweep_velocity:.2f}, max RMP: {prior.max_rmp_phase:.2f}\")
-print(f\"Action: sweep={action.sweep_velocity:.2f}, RMP={action.rmp_phase:.2f}, gas={action.gas_puff:.1f}\")
-print(f\"Pellet ready: {action.pellet_ready}, watchdog override: {action.overridden}\")
-print(f\"Venturi reward: {state.reward:.3f}\")
+# Divertor heat flux from HELIX focal map (real shot)
+ece = imas_to_synthetic_shot(cmod)
+helix = HelixEngine().process(ece.heat_field, ece.raw_signal, ece.angles)
+heat_flux = helix.focal_map
+action = venturi.fast_loop(heat_flux, prior, elm_probability=helix.elm_probability)
+state = venturi.step(heat_flux, elm_probability=helix.elm_probability)
+
+print(f"Prior max sweep: {prior.max_sweep_velocity:.2f}, max RMP: {prior.max_rmp_phase:.2f}")
+print(f"Action: sweep={action.sweep_velocity:.2f}, RMP={action.rmp_phase:.2f}, gas={action.gas_puff:.1f}")
+print(f"Pellet ready: {action.pellet_ready}, watchdog override: {action.overridden}")
+print(f"Venturi reward: {state.reward:.3f}")
 """
         ),
         code(
             """\
-# Train ELM predictor on synthetic corpus
-corpus = generate_corpus(n_shots=200, grid_size=24, seed=11)
+# Train ELM predictor on fetched elm_corpus.npz (from `fuselk data fetch`)
 elm = ELMPredictor()
-acc = elm.train_from_corpus(corpus)
+acc = elm.train(corpus["features"], corpus["labels"])
 detector = DisruptionDetector(elm)
 
-shot = generate_ece_shot(32, seed=99, island_amplitude=0.85)
-helix = HelixEngine().process(shot.heat_field, shot.raw_signal, shot.angles)
-assessment = detector.assess(helix, q_min=1.8, beta_n=3.2)
+# Assess every C-Mod shot with real q_min / beta_n from profiles
+engine = HelixEngine()
+odl_rates, dis_probs, actions = [], [], []
+for path in cmod_shots:
+    imas = load_imas_hdf5(path)
+    ece = imas_to_synthetic_shot(imas)
+    hres = engine.process(ece.heat_field, ece.raw_signal, ece.angles)
+    q_min = float(np.min(imas.q_profile.values))
+    beta_n = float(np.mean(imas.Te_profile.values)) / 2000.0
+    assessment = detector.assess(hres, q_min=q_min, beta_n=beta_n)
+    meta = load_odl_meta(path)
+    odl_rates.append(meta["elm_event_rate"] if meta else 0.0)
+    dis_probs.append(assessment.probability)
+    actions.append(assessment.recommended_action)
 
-print(f\"ELM train accuracy: {acc:.1%}\")
-print(f\"Disruption probability: {assessment.probability:.2f}\")
-print(f\"Recommended action: {assessment.recommended_action}\")
-print(f\"Time to disruption: {assessment.time_to_disruption_ms:.1f} ms\")
+print(f"ELM train accuracy (fetched corpus, n={len(corpus['labels'])}): {acc:.1%}")
+print(f"Mean disruption P_dis on C-Mod corpus: {np.mean(dis_probs):.2f}")
+print(f"Most common action: {max(set(actions), key=actions.count)}")
+
+fig, ax = plt.subplots(figsize=(7, 4))
+ax.scatter(odl_rates, dis_probs, s=60, c=dis_probs, cmap="Reds", edgecolors="k", linewidths=0.3)
+ax.set_xlabel("ODL density-limit phase rate")
+ax.set_ylabel("Fused disruption probability P_dis")
+ax.set_title("Control stack vs. experimental precursor labels")
+plt.tight_layout()
+plt.show()
 """
         ),
         md("## Experiment: heat-flux profile sweep"),
@@ -761,19 +955,27 @@ where each term is normalized to $[0,1]$. This is the **abstract scalar** that c
 `FusionCell` extends `ReactorCell` with full trifecta stripping + brine coating hypothesis.
 """
         ),
-        code(SETUP),
+        code(SETUP + "\n" + DATA_BOOTSTRAP),
         code(
             """\
+from deepiri_fuselk.models.elm_predictor import ELMPredictor
 from deepiri_fuselk.sim import ReactorCell
 from deepiri_fuselk.sim.fusion_kpis import FusionKPIs
 
-cell = ReactorCell(grid_size=24, train_elm=True)
+# Train ELM on fetched corpus; drive reactor with real C-Mod IMAS profiles
+elm = ELMPredictor()
+elm.train(corpus["features"], corpus["labels"])
+
+cell = ReactorCell(grid_size=corpus["grid_size"], train_elm=False)
+cell.elm = elm
+cell.imas = load_imas_hdf5(cmod_shots[0])
 run = cell.run(n_steps=40, seed=42)
 report = run.to_report()
 
-print(\"Reactor run report:\")
+print(f"Driving shot: {cell.imas.shot_id} ({cell.imas.device})")
+print("Reactor run report:")
 for k, v in report.items():
-    print(f\"  {k}: {v}\")
+    print(f"  {k}: {v}")
 """
         ),
         code(
@@ -814,7 +1016,8 @@ plt.show()
             """\
 from deepiri_fuselk.sim import DigitalTwin
 
-twin = DigitalTwin(grid_size=16)
+twin = DigitalTwin(grid_size=corpus["grid_size"], device="Alcator C-Mod")
+twin.imas_shot = load_imas_hdf5(cmod_shots[0])
 twin.reset()
 for _ in range(30):
     twin.step()
@@ -861,6 +1064,38 @@ print(f\"Brine viable={report.fuel_cycle.brine_viable}, heat reduction={report.f
 print(f\"Actions taken: {report.recommended_actions}\")
 """
         ),
+        md("## Multi-shot replay — C-Mod discharge sweep"),
+        code(
+            """\
+from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+shot_scores = []
+for path in cmod_shots[:8]:
+    imas = load_imas_hdf5(path)
+    fusion = FusionCell(grid_size=corpus["grid_size"], train_elm=False)
+    fusion.reactor.imas = imas
+    _, rep = fusion.run(n_steps=15, seed=abs(hash(imas.shot_id)) % 1000)
+    meta = load_odl_meta(path)
+    shot_scores.append({
+        "shot": imas.shot_id,
+        "fusion_score": rep.fusion_score,
+        "odl_rate": meta["elm_event_rate"] if meta else 0.0,
+        "disruption": rep.disruption_risk,
+        "tbr": rep.fuel_cycle.tritium_breeding_ratio,
+    })
+
+fig, ax = plt.subplots(figsize=(10, 4))
+labels = [s["shot"].replace("CMOD_", "") for s in shot_scores]
+scores = [s["fusion_score"] for s in shot_scores]
+colors = [s["odl_rate"] for s in shot_scores]
+ax.bar(labels, scores, color=plt.cm.coolwarm(colors))
+ax.set_ylabel("Fusion score F"); ax.set_xlabel("C-Mod discharge")
+ax.set_title("FusionCell KPI on fetched real discharges (color = ODL precursor rate)")
+plt.xticks(rotation=45, ha="right")
+plt.tight_layout()
+plt.show()
+"""
+        ),
     )
 
 
@@ -888,7 +1123,7 @@ where $\\mathcal{D}_k$ is the diagnostic injection (ECE/SXR) and $\\Phi_{pred}$ 
 **Novelty claim (precise):** fuselk is the first open repository where $\\Phi_{ctrl}$ is constrained by both $P_{dis}$ *and* fuel-cycle feasibility $(\\mathrm{TBR}, \\mathrm{Pe}, N_{fus,\\mu})$ — coupling control theory to nuclear fuel engineering.
 """
         ),
-        code(SETUP + "\nfrom IPython.display import display\nimport sympy as sp\nsp.init_printing()"),
+        code(SETUP + "\n" + DATA_BOOTSTRAP + "\nfrom IPython.display import display\nimport sympy as sp\nsp.init_printing()"),
         md(
             """## I. Oil–water barrier (plasma edge + fuel cycle)
 
@@ -930,14 +1165,15 @@ Turbulence is incoherent across rotations ⇒ variance reduction $\\propto 1/\\s
         code(
             """\
 from deepiri_fuselk.helix import HelixEngine, boozer_map, field_line_pitch, q_profile
-from deepiri_fuselk.sim import generate_ece_shot
 
-shot = generate_ece_shot(40, seed=3)
-helix = HelixEngine().process(shot.heat_field, shot.raw_signal, shot.angles)
+cmod = load_imas_hdf5(cmod_shots[0])
+ece = imas_to_synthetic_shot(cmod)
+helix = HelixEngine().process(ece.heat_field, ece.raw_signal, ece.angles)
 
 r = np.linspace(0.2, 1.0, 50)
+q_vals = np.interp(r, cmod.q_profile.radius, cmod.q_profile.values)
 theta_b, phi_b = boozer_map(r, np.zeros_like(r))
-print(f\"HELIX SNR={helix.phase_locked_snr:.2f}, HQRM var={helix.hqrm.heat_variance:.4f}, converged={helix.hqrm.converged}\")
+print(f"C-Mod {cmod.shot_id}: HELIX SNR={helix.phase_locked_snr:.2f}, HQRM var={helix.hqrm.heat_variance:.4f}")
 """
         ),
         md(
@@ -1037,37 +1273,44 @@ $$\\boxed{\\mathcal{F} = \\sum_i w_i \\, \\phi_i(\\mathcal{U})}$$
         ),
         code(
             """\
-from deepiri_fuselk.physics import PDEParameters, interface_thickness, peclet_criterion, solve_oil_water_steady
+from deepiri_fuselk.barrier.breeding_blanket import tritium_breeding_ratio
 from deepiri_fuselk.muon import RateNetworkParams, run_rate_network
 from deepiri_fuselk.sim.fusion_cell import FusionCell
+from deepiri_fuselk.sim.vision_alignment import audit_vision_alignment
 
-cell = FusionCell(grid_size=20, train_elm=False)
-_, report = cell.run(n_steps=30, seed=99)
+# FusionCell on real C-Mod profiles
+fusion = FusionCell(grid_size=corpus["grid_size"], train_elm=False)
+fusion.reactor.imas = load_imas_hdf5(cmod_shots[0])
+_, report = fusion.run(n_steps=30, seed=99, include_vision=True)
 
-print(\"=== Unified fuselk report ===\")
-print(f\"F = {report.fusion_score:.3f}\")
-print(f\"  TBR={report.fuel_cycle.tritium_breeding_ratio:.3f}, Pe={report.fuel_cycle.peclet_number:.2f}\")
-print(f\"  μ: {report.muon_cycle.fusions_per_muon:.1f} fusions/μ (breakeven={report.muon_cycle.breakeven})\")
-print(f\"  ELM-free={report.elm_free_fraction:.2f}, P_dis={report.disruption_risk:.2f}\")
+print("=== Unified fuselk report (real shot profiles) ===")
+print(f"F = {report.fusion_score:.3f}")
+print(f"  TBR={report.fuel_cycle.tritium_breeding_ratio:.3f}, Pe={report.fuel_cycle.peclet_number:.2f}")
+print(f"  μ: {report.muon_cycle.fusions_per_muon:.1f} fusions/μ (breakeven={report.muon_cycle.breakeven})")
+print(f"  ELM-free={report.elm_free_fraction:.2f}, P_dis={report.disruption_risk:.2f}")
+if report.vision:
+    aligned = sum(1 for p in report.vision.pillars if p.satisfied)
+    print(f"  VISION pillars aligned: {aligned}/{len(report.vision.pillars)}")
 
-# Sensitivity: Pe vs muon strip rate (abstract cross-domain plane)
+# Cross-domain feasibility plane with computed TBR (not placeholder)
 pe_grid = np.linspace(0.5, 2.0, 8)
 strip_grid = np.linspace(0, 0.6, 8)
 Z = np.zeros((len(strip_grid), len(pe_grid)))
 for i, rs in enumerate(strip_grid):
     for j, pe_target in enumerate(pe_grid):
-        v_v = pe_target * 0.02 / 0.05  # rough scale to hit Pe
+        v_v = pe_target * 0.02 / 0.05
         p = PDEParameters(v_v=v_v)
-        tbr = 1.0  # placeholder scale
+        res = solve_oil_water_steady(n_grid=32, params=p)
+        tbr = tritium_breeding_ratio(res.state, p)
         mu = run_rate_network(params=RateNetworkParams(R_photon=rs, R_proton=0.2)).fusions_per_muon / 284
         Z[i, j] = 0.5 * min(1, tbr) + 0.5 * min(1, mu)
 
 fig, ax = plt.subplots(figsize=(6, 5))
-im = ax.imshow(Z, origin=\"lower\", aspect=\"auto\", cmap=\"viridis\",
+im = ax.imshow(Z, origin="lower", aspect="auto", cmap="viridis",
                extent=[pe_grid[0], pe_grid[-1], strip_grid[0], strip_grid[-1]])
-ax.set_xlabel(\"Peclet number (fuel extraction)\"); ax.set_ylabel(\"Photon strip rate\")
-ax.set_title(\"Cross-domain feasibility plane (schematic)\")
-plt.colorbar(im, label=\"combined fuel-cycle score\")
+ax.set_xlabel("Peclet number (fuel extraction)"); ax.set_ylabel("Photon strip rate")
+ax.set_title("Cross-domain feasibility plane (computed TBR + μ gain)")
+plt.colorbar(im, label="combined fuel-cycle score")
 plt.tight_layout()
 plt.show()
 """

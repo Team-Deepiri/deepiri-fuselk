@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from deepiri_fuselk.control.rl_agent import load_policy
+from deepiri_fuselk.control.vent_circularizer_env import VentCircularizerEnv
 from deepiri_fuselk.control.venturi_controller import VenturiController, VenturiState
 
 
@@ -26,7 +27,7 @@ class HybridPolicyRunner:
         self.venturi = VenturiController()
         self.policy_path = Path(policy_path) if policy_path else None
         self._model = None
-        self._rl_env = None
+        self._rl_env: VentCircularizerEnv | None = None
         self._rl_grid_size: int | None = None
         if self.policy_path and self.policy_path.exists():
             self._model = load_policy(self.policy_path)
@@ -35,12 +36,11 @@ class HybridPolicyRunner:
     def has_policy(self) -> bool:
         return self._model is not None
 
-    def _ensure_rl_env(self, grid_size: int):
-        from deepiri_fuselk.control.vent_circularizer_env import VentCircularizerEnv
-
+    def _ensure_rl_env(self, grid_size: int) -> VentCircularizerEnv:
         if self._rl_env is None or self._rl_grid_size != grid_size:
             self._rl_env = VentCircularizerEnv(grid_size=grid_size)
             self._rl_grid_size = grid_size
+        assert self._rl_env is not None
         self._rl_env.reset()
         return self._rl_env
 
