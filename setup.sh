@@ -78,7 +78,7 @@ install_system_deps_apt() {
     libgbm1 \
     libegl1 \
     libopengl0 \
-    libasound2 \
+    libasound2t64 \
     libpulse0 \
     libpango-1.0-0 \
     libcairo2 \
