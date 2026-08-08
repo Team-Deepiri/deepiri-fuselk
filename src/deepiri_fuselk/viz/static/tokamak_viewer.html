@@ -2,32 +2,83 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
   <title>fuselk Tokamak Viewer</title>
   <style>
+    :root {
+      --bg-a: #141a2e;
+      --bg-b: #080a10;
+      --text: #e8ecf4;
+      --muted: #7a8aaa;
+      --panel: rgba(16, 20, 31, 0.82);
+      --border: #2a3348;
+      --accent: #4488ff;
+      --core: #ff6622;
+      --opoint: #ff3344;
+      --radius: 12px;
+      --shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+      --fs-title: clamp(0.9rem, 0.8rem + 0.5vw, 1.05rem);
+    }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      background: radial-gradient(ellipse at 50% 30%, #141a2e 0%, #080a10 70%);
-      color: #e8ecf4;
-      font-family: system-ui, sans-serif;
+      background: radial-gradient(ellipse at 50% 30%, var(--bg-a) 0%, var(--bg-b) 70%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       overflow: hidden;
     }
     #hud {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: clamp(10px, 2vw, 16px);
+      left: clamp(10px, 2vw, 16px);
       z-index: 10;
-      background: rgba(16, 20, 31, 0.82);
-      border: 1px solid #2a3348;
-      border-radius: 10px;
-      padding: 12px 16px;
-      backdrop-filter: blur(6px);
-      min-width: 220px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      min-width: min(240px, 60vw);
+      box-shadow: var(--shadow);
     }
-    #hud h2 { margin: 0 0 4px; font-size: 15px; color: #fff; }
-    #hud p { margin: 0; font-size: 11px; color: #7a8aaa; }
-    #legend { margin-top: 10px; font-size: 11px; line-height: 1.7; }
+    #hud h2 { margin: 0 0 4px; font-size: var(--font-title); color: #fff; letter-spacing: 0.01em; }
+    #hud p { margin: 0; font-size: clamp(0.68rem, 0.6rem + 0.3vw, 0.78rem); color: var(--muted); line-height: 1.5; }
+    #legend { margin-top: 12px; font-size: clamp(0.68rem, 0.6rem + 0.3vw, 0.78rem); line-height: 1.8; }
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    #hud button {
+      margin-top: 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 6px 14px;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 160ms ease, transform 160ms ease;
+    }
+    #hud button:hover { filter: brightness(1.12); }
+    #hud button:active { transform: translateY(1px); }
+    #fps {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      z-index: 10;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 10px;
+      backdrop-filter: blur(6px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #hud button { background: transparent; border: 1px solid var(--border); }
+    }
   </style>
 </head>
 <body>
@@ -39,7 +90,9 @@
       <div><span class="dot" style="background:#ff6622"></span>Plasma core</div>
       <div><span class="dot" style="background:#ff3344"></span>HELIX O-point lock</div>
     </div>
+    <button id="pause-btn" type="button">Pause</button>
   </div>
+  <div id="fps">— fps</div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     const scene = new THREE.Scene();
@@ -88,10 +141,22 @@
     camera.position.set(0, 1.2, 8.5);
     camera.lookAt(0, 0, 0);
 
+    let playing = true;
+    document.getElementById('pause-btn').addEventListener('click', () => {
+      playing = !playing;
+      document.getElementById('pause-btn').textContent = playing ? 'Pause' : 'Resume';
+    });
+
     let t0 = performance.now();
+    let frames = 0;
+    let fpsEl = document.getElementById('fps');
+    let lastFpsT = performance.now();
+    let lastT = 0;
     function animate(now) {
       requestAnimationFrame(animate);
-      const t = (now - t0) * 0.001;
+      frames += 1;
+      if (playing) lastT = now - t0;
+      const t = lastT * 0.001;
       torus.rotation.y += 0.004;
       torus.rotation.x = Math.sin(t * 0.3) * 0.08;
       plasma.scale.setScalar(1 + Math.sin(t * 2.2) * 0.04);
@@ -100,6 +165,11 @@
       oPoint.position.y = 0.35 * Math.sin(t * 1.6);
       oPoint.position.z = 0.2 * Math.sin(t * 0.9);
       ring.lookAt(camera.position);
+      if (now - lastFpsT >= 1000) {
+        fpsEl.textContent = (frames * 1000 / (now - lastFpsT)).toFixed(0) + ' fps';
+        frames = 0;
+        lastFpsT = now;
+      }
       renderer.render(scene, camera);
     }
     animate(t0);
