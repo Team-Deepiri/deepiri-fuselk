@@ -9,14 +9,13 @@ from deepiri_fuselk.viz.dashboard.figures import build_control_room_figure, buil
 from deepiri_fuselk.viz.dashboard.theme import (
     ACCENT,
     BG,
-    CARD,
     FAINT,
     FONT_STACK,
     MUTED,
-    TEXT,
     STAT_CARD_STYLE,
     STAT_LABEL_STYLE,
     STAT_VALUE_STYLE,
+    TEXT,
 )
 from deepiri_fuselk.viz.simulation_engine import LiveSimulation
 
