@@ -6,6 +6,18 @@ from pathlib import Path
 
 from dash import Dash, Input, Output, State, dcc, html
 from deepiri_fuselk.viz.dashboard.figures import build_control_room_figure, build_kpi_strip
+from deepiri_fuselk.viz.dashboard.theme import (
+    ACCENT,
+    BG,
+    CARD,
+    FAINT,
+    FONT_STACK,
+    MUTED,
+    TEXT,
+    STAT_CARD_STYLE,
+    STAT_LABEL_STYLE,
+    STAT_VALUE_STYLE,
+)
 from deepiri_fuselk.viz.simulation_engine import LiveSimulation
 
 _STATIC = Path(__file__).resolve().parent.parent / "static"
@@ -23,10 +35,10 @@ def create_app() -> Dash:
     )
     app.layout = html.Div(
         style={
-            "fontFamily": "system-ui, sans-serif",
+            "fontFamily": FONT_STACK,
             "padding": "16px",
-            "backgroundColor": "#0f1117",
-            "color": "#e8e8e8",
+            "backgroundColor": BG,
+            "color": TEXT,
             "minHeight": "100vh",
         },
         children=[
@@ -51,16 +63,17 @@ def create_app() -> Dash:
                             ),
                             html.P(
                                 "Live FusionCell simulation · HELIX · Venturi · ELM/disruption · fuel & muon cycle",
-                                style={"margin": 0, "color": "#888"},
+                                style={"margin": 0, "color": MUTED},
                             ),
                         ],
                     ),
                 ],
             ),
             html.Div(
+                className="stat-row",
                 style={
                     "display": "grid",
-                    "gridTemplateColumns": "repeat(4, 1fr)",
+                    "gridTemplateColumns": "repeat(auto-fit, minmax(180px, 1fr))",
                     "gap": "12px",
                     "margin": "16px 0",
                 },
@@ -110,14 +123,14 @@ def create_app() -> Dash:
                         "Open 3D Tokamak Viewer",
                         href="/assets/tokamak_viewer.html",
                         target="_blank",
-                        style={"marginLeft": "auto", "color": "#66aaff"},
+                        style={"marginLeft": "auto", "color": ACCENT},
                     ),
                 ],
             ),
             dcc.Interval(id="interval", interval=2000, n_intervals=0),
             html.Footer(
                 "deepiri-fuselk v0.4 — Fusion Unified Simulation, ELM Learning & Kinetics",
-                style={"marginTop": "24px", "color": "#555", "fontSize": "12px"},
+                style={"marginTop": "24px", "color": FAINT, "fontSize": "12px"},
             ),
         ],
     )
@@ -164,25 +177,20 @@ def create_app() -> Dash:
 
 def _stat_card(title: str, elem_id: str, value: str) -> html.Div:
     return html.Div(
-        style={
-            "background": "#1a1d27",
-            "borderRadius": "8px",
-            "padding": "12px 16px",
-            "border": "1px solid #2a2d37",
-        },
+        style=STAT_CARD_STYLE,
         children=[
-            html.H4(title, style={"margin": "0 0 4px 0", "fontSize": "12px", "color": "#888"}),
-            html.P(value, id=elem_id, style={"margin": 0, "fontSize": "18px", "fontWeight": 600}),
+            html.H4(title, style=STAT_LABEL_STYLE),
+            html.P(value, id=elem_id, style=STAT_VALUE_STYLE),
         ],
     )
 
 
 def _button_style() -> dict:
     return {
-        "background": "#4488ff",
+        "background": ACCENT,
         "color": "#fff",
         "border": "none",
-        "borderRadius": "6px",
+        "borderRadius": "8px",
         "padding": "8px 16px",
         "cursor": "pointer",
         "fontWeight": 600,

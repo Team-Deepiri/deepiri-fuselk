@@ -3,6 +3,15 @@
 from __future__ import annotations
 
 import plotly.graph_objects as go
+from deepiri_fuselk.viz.dashboard.theme import (
+    ACCENT,
+    BG,
+    CARD,
+    DANGER,
+    MUTED,
+    OK,
+    PLOT_THEME,
+)
 from deepiri_fuselk.viz.simulation_engine import SimulationFrame
 from deepiri_fuselk.viz.traffic_viewer import traffic_arrows
 from plotly.subplots import make_subplots
@@ -58,7 +67,7 @@ def build_control_room_figure(frame: SimulationFrame) -> go.Figure:
             title={"text": "Disruption %"},
             gauge={
                 "axis": {"range": [0, 100]},
-                "bar": {"color": "red" if elm_prob > 0.5 else "green"},
+                "bar": {"color": DANGER if elm_prob > 0.5 else OK},
                 "steps": [
                     {"range": [0, 45], "color": "#1a3d1a"},
                     {"range": [45, 65], "color": "#4d4d1a"},
@@ -101,9 +110,9 @@ def build_control_room_figure(frame: SimulationFrame) -> go.Figure:
         height=720,
         showlegend=False,
         title_text=f"fuselk Live Simulation — step {frame.step} · action: {frame.action}",
-        paper_bgcolor="#0f1117",
-        plot_bgcolor="#1a1d27",
-        font={"color": "#e0e0e0"},
+        paper_bgcolor=CARD,
+        plot_bgcolor=BG,
+        **PLOT_THEME,
     )
     return fig
 
@@ -130,12 +139,12 @@ def build_kpi_strip(frame: SimulationFrame) -> go.Figure:
             go.Indicator(
                 mode="gauge+number",
                 value=val,
-                title={"text": title, "font": {"size": 11, "color": "#9aa8c4"}},
+                title={"text": title, "font": {"size": 11, "color": MUTED}},
                 number={"suffix": "%", "font": {"size": 18}},
                 gauge={
                     "axis": {"range": [0, mx], "tickwidth": 0},
-                    "bar": {"color": "#4488ff", "thickness": 0.35},
-                    "bgcolor": "#1a1d27",
+                    "bar": {"color": ACCENT, "thickness": 0.35},
+                    "bgcolor": CARD,
                     "borderwidth": 0,
                 },
             ),
@@ -145,9 +154,9 @@ def build_kpi_strip(frame: SimulationFrame) -> go.Figure:
     fig.update_layout(
         height=220,
         showlegend=False,
-        paper_bgcolor="#0f1117",
-        plot_bgcolor="#0f1117",
-        font={"color": "#e0e0e0"},
+        paper_bgcolor=BG,
+        plot_bgcolor=BG,
+        **PLOT_THEME,
         margin={"t": 28, "b": 12, "l": 16, "r": 16},
     )
     return fig
