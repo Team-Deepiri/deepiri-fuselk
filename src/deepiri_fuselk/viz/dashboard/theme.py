@@ -43,8 +43,6 @@ STAT_VALUE_STYLE = {
 }
 
 PLOT_THEME = {
-    "paper_bgcolor": CARD,
-    "plot_bgcolor": BG,
     "font": {"color": TEXT, "family": FONT_STACK},
     "title_font_color": TEXT,
 }
