@@ -42,16 +42,26 @@ TUTORIAL_PAGES: list[TutorialPage] = [
     ),
     TutorialPage(
         "Equilibrium panel",
-        "This is the poloidal cross-section — a slice through the vessel. The "
-        "nested contour lines are flux surfaces: surfaces of constant magnetic "
-        "flux, hottest and densest at the core and cooler toward the edge.\n\n"
-        "The red outline is the separatrix, the boundary between confined "
-        "plasma and the open field lines that carry heat to the divertor. "
-        "Where the poloidal field goes to zero on that boundary is the "
-        "X-point. Plasma shape is described by elongation (κ, how tall vs. "
-        "wide) and triangularity (δ, how “D”-shaped). Strike points are "
-        "where the separatrix meets the divertor plates — the small spots "
-        "that take a concentrated heat load.",
+        "This is the poloidal cross-section — a slice through the vessel, "
+        "updated live as the pulse runs. The nested contour lines are flux "
+        "surfaces: surfaces of constant poloidal magnetic flux, one inside "
+        "the next like an onion, hottest and densest at the core and "
+        "progressively cooler toward the edge.\n\n"
+        "The red outline is the separatrix — the last closed flux surface, "
+        "and the boundary between confined plasma and the open field lines "
+        "that lead straight to the divertor. Somewhere on that boundary the "
+        "poloidal field cancels to zero; that null point is the X-point, and "
+        "it's what makes the separatrix a separatrix instead of just another "
+        "flux surface. Where the open field lines actually land on the "
+        "divertor plates are the strike points — narrow, intensely loaded "
+        "spots that carry almost all of the exhaust heat leaving the "
+        "plasma.\n\n"
+        "Plasma shape is read off the same picture: elongation (κ) is how "
+        "tall the cross-section is relative to its width, and triangularity "
+        "(δ) is how strongly it's pulled into a “D” shape. Both are shaping "
+        "knobs — pushing them further from a simple circle generally buys "
+        "better confinement and stability margin, at the cost of a harder "
+        "shape to control.",
     ),
     TutorialPage(
         "Trace panel",
@@ -66,13 +76,26 @@ TUTORIAL_PAGES: list[TutorialPage] = [
     ),
     TutorialPage(
         "Status panel",
-        "Four groups at a glance. Core Parameters: Ip, Bt, Te0, n̄e, Wth, "
-        "τE. Power Balance: heating in (Poh / PNBI / PECH) versus losses out "
-        "(Prad, Ploss), shown as colored bars.\n\n"
-        "Stability & Disruption Risk: q95, βN, fGW (Greenwald fraction), and "
-        "a red disruption-risk gauge that fills up as you approach the "
-        "limits. Fusion Performance: neutron rate and Qplasma — Q = 1 is "
-        "scientific breakeven, Q = 10 is the ITER design target.",
+        "Four groups, read top to bottom. Core Parameters is the plasma's "
+        "vital signs: plasma current Ip, toroidal field Bt, central "
+        "electron temperature Te0, line-averaged density n̄e, stored "
+        "thermal energy Wth, and energy confinement time τE — how long that "
+        "energy would take to leak away with no more heating.\n\n"
+        "Power Balance is the energy ledger: heating power in from ohmic "
+        "current (Poh), neutral beams (PNBI), and electron-cyclotron "
+        "heating (PECH), set against what leaves as radiation (Prad) and "
+        "conducted/convected loss (Ploss). The colored bars make imbalance "
+        "obvious — losses creeping up on input heating is an early warning "
+        "sign.\n\n"
+        "Stability & Disruption Risk tracks the safety factor q95, "
+        "normalized beta βN, and Greenwald density fraction fGW against "
+        "their operational limits, rolled up into a single red "
+        "disruption-risk gauge that fills as any of them gets close to the "
+        "edge. Fusion Performance closes the loop: neutron rate (a direct "
+        "measure of fusion reactions happening right now) and Qplasma, the "
+        "ratio of fusion power out to heating power in — Q = 1 is "
+        "scientific breakeven, and Q = 10 is the performance ITER is "
+        "designed to demonstrate.",
     ),
     TutorialPage(
         "Port view",
@@ -86,13 +109,27 @@ TUTORIAL_PAGES: list[TutorialPage] = [
     ),
     TutorialPage(
         "Mission briefing",
-        "Your goals: don't disrupt, avoid ELMs (edge-localized modes that "
-        "erode the tungsten divertor over repeated pulses), get enough "
-        "fusion power to hit a good Q, and protect the divertor — typically "
-        "via detachment or seeded impurities that spread the heat load.\n\n"
-        "Strategy tip: smaller, lower-field devices are lower-consequence to "
-        "experiment on. Start on DIII-D or JET, learn how the controls "
-        "behave, then work up to ITER-scale discharges.",
+        "Four goals, in tension with each other: don't disrupt — a sudden "
+        "loss of confinement dumps the plasma's current and energy into "
+        "the vessel in milliseconds, and is the single worst thing that can "
+        "happen to a pulse. Avoid ELMs — edge-localized modes, repeated "
+        "bursts that eject heat and particles from the plasma edge; "
+        "individually survivable, but they erode the tungsten divertor "
+        "over many pulses if left unchecked. Achieve sufficient fusion "
+        "power — push βN and density high enough to get a Q worth reporting, "
+        "without wandering into the disruption or Greenwald limits doing "
+        "it. And protect the divertor — the heat and particle exhaust has "
+        "to go somewhere; detachment (cooling the plasma near the strike "
+        "points) and seeded impurities (radiating power away volumetrically "
+        "before it concentrates on the plates) are how real devices spread "
+        "that load out.\n\n"
+        "Strategy tip: these goals get harder together as you scale up. "
+        "Smaller, lower-field devices like DIII-D are lower-consequence to "
+        "push toward their limits — a disruption there teaches you the same "
+        "lesson at a fraction of the stored energy. Learn how the controls "
+        "behave on DIII-D or JET, then carry that intuition up to "
+        "ITER-scale discharges, where the same mistakes are far more "
+        "expensive.",
     ),
     TutorialPage(
         "Quick controls recap",
