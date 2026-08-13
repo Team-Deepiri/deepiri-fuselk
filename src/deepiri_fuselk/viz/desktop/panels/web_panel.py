@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 _TOKAMAK_MARKER = "tokamak_viewer.html"
 _SIM_FRAME_POLL_MS = 400
+_SIM_FRAME_TIMEOUT_MS = 1500  # abort a hung request well before the next poll tick
 _LIVE_FEED_POLL_MS = 90  # ~11 fps cap; actual rate also bounded by LiveFeedSource
 
 
@@ -70,6 +71,7 @@ class WebPanel(QWidget):
         self._net_manager: QNetworkAccessManager | None = None
         self._sim_timer: QTimer | None = None
         self._sim_reply_in_flight = False
+        self._sim_watchdog: QTimer | None = None
 
         self._live_feed: LiveFeedSource | None = None
         self._live_timer: QTimer | None = None
@@ -106,14 +108,37 @@ class WebPanel(QWidget):
         self._sim_timer.start(_SIM_FRAME_POLL_MS)
 
     def _poll_sim_frame(self) -> None:
+        # `_sim_reply_in_flight` guards against overlapping requests, but a
+        # backend hiccup (slow/hung /api/sim/frame) must never be able to
+        # wedge that guard forever — if it did, this bridge would silently
+        # stop updating the viewer for the rest of the session. Two
+        # independent safety nets below make sure that can't happen:
+        # QNetworkRequest's own transfer timeout, and a manual watchdog
+        # that aborts the request outright if it outlives one full poll
+        # cycle's worth of patience.
         if self._sim_reply_in_flight or self._net_manager is None or self._sim_frame_url is None:
             return
         self._sim_reply_in_flight = True
-        reply = self._net_manager.get(QNetworkRequest(QUrl(self._sim_frame_url)))
+        request = QNetworkRequest(QUrl(self._sim_frame_url))
+        if hasattr(request, "setTransferTimeout"):
+            request.setTransferTimeout(_SIM_FRAME_TIMEOUT_MS)
+        reply = self._net_manager.get(request)
         reply.finished.connect(lambda: self._on_sim_frame_reply(reply))
+        watchdog = QTimer(self)
+        watchdog.setSingleShot(True)
+        watchdog.timeout.connect(lambda: self._abort_stale_reply(reply))
+        watchdog.start(_SIM_FRAME_TIMEOUT_MS)
+        self._sim_watchdog = watchdog
+
+    @staticmethod
+    def _abort_stale_reply(reply: QNetworkReply) -> None:
+        if not reply.isFinished():
+            reply.abort()  # triggers `finished`, which resets the in-flight guard
 
     def _on_sim_frame_reply(self, reply: QNetworkReply) -> None:
         self._sim_reply_in_flight = False
+        if self._sim_watchdog is not None:
+            self._sim_watchdog.stop()
         try:
             if reply.error() != QNetworkReply.NetworkError.NoError:
                 return

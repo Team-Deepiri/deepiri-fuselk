@@ -96,17 +96,18 @@
       position: absolute;
       inset: 0;
       z-index: 5;
-      background: radial-gradient(ellipse at 50% 45%, rgba(255, 60, 40, 0.55) 0%, rgba(255, 60, 40, 0) 70%);
+      background:
+        radial-gradient(ellipse at 50% 45%, rgba(255, 255, 245, 0.5) 0%, rgba(255, 70, 40, 0.55) 30%, rgba(255, 40, 30, 0) 72%);
       opacity: 0;
       pointer-events: none;
-      transition: opacity 90ms ease-out;
+      mix-blend-mode: screen;
     }
     #live-layer {
       position: absolute;
       inset: 0;
       z-index: 3;
       display: none;
-      background: #000;
+      background: radial-gradient(ellipse at 50% 30%, var(--bg-a) 0%, var(--bg-b) 70%);
       align-items: center;
       justify-content: center;
     }
@@ -118,15 +119,36 @@
       filter: contrast(1.05) saturate(1.05);
     }
     #live-empty {
-      position: absolute;
-      color: var(--muted);
+      position: relative;
+      color: var(--text);
       font-size: 0.85rem;
       text-align: center;
-      max-width: 60%;
+      max-width: min(420px, 70vw);
       display: none;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: var(--shadow);
+      line-height: 1.55;
     }
     #live-empty.show { display: block; }
-    #live-empty .big { font-size: 1.6rem; display: block; margin-bottom: 8px; }
+    #live-empty .big {
+      font-size: 1.8rem;
+      display: block;
+      margin-bottom: 10px;
+      filter: grayscale(0.2) opacity(0.85);
+    }
+    #live-empty .title {
+      display: block;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+      font-size: 0.92rem;
+    }
+    #live-empty .sub { color: var(--muted); font-size: 0.76rem; }
   </style>
 </head>
 <body>
@@ -153,18 +175,23 @@
   <div id="live-layer">
     <img id="live-video" alt="Live port view feed" />
     <div id="live-empty">
-      <span class="big">📷⃠</span>
-      No live feed detected — connect a camera/RTSP source and switch back to
-      this mode, or use Synthetic render.
+      <span class="big">📷</span>
+      <span class="title">No live feed detected</span>
+      <span class="sub">Connect a webcam or RTSP/MJPEG source, then switch back to
+      Live camera feed — or stay on Synthetic render.</span>
     </div>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // Slightly narrower FOV than the old 58° — this panel is typically a
+    // large *wide* rectangle (bottom-right of the control-room grid), not
+    // square, so a tighter FOV plus the pulled-back camera below keeps the
+    // torus fully framed without fisheye distortion on ultra-wide panels.
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     document.body.appendChild(renderer.domElement);
 
     const ambient = new THREE.AmbientLight(0x334466, 0.6);
@@ -172,6 +199,11 @@
     const key = new THREE.PointLight(0x88aaff, 1.2, 40);
     key.position.set(4, 3, 6);
     scene.add(key);
+    // Low fill light from below the divertor ring so the heat-flux colours
+    // on the plates read clearly even when the panel is much wider than tall.
+    const fill = new THREE.PointLight(0xffaa66, 0.5, 30);
+    fill.position.set(-3, -2, 4);
+    scene.add(fill);
 
     const torus = new THREE.Mesh(
       new THREE.TorusGeometry(3, 1, 20, 120),
@@ -253,8 +285,8 @@
       return HEAT_STOPS[HEAT_STOPS.length - 1].c.clone();
     }
 
-    camera.position.set(0, 1.2, 8.5);
-    camera.lookAt(0, 0, 0);
+    camera.position.set(0, 1.3, 9.6);
+    camera.lookAt(0, -0.1, 0);
 
     let playing = true;
     document.getElementById('pause-btn').addEventListener('click', () => {
@@ -270,8 +302,10 @@
     let divertorHeat = new Array(DIVERTOR_COUNT).fill(0.3);
     let disruptionProb = 0;
     let lastDisruptionFlashAt = -1e9;
+    let lastFrameReceivedAt = 0; // 0 = never received a real frame yet
     const flashEl = document.getElementById('disruption-flash');
     const statusEl = document.getElementById('status-line');
+    const STALE_AFTER_MS = 3000; // if web_panel.py's bridge stalls, say so instead of freezing silently
 
     function flattenHeat(arr) {
       // raw_heat / controlled_heat arrive as a 2D grid (list of lists);
@@ -298,12 +332,17 @@
           }
         }
         if (typeof frame.disruption_probability === 'number') {
+          const wasCalm = disruptionProb <= 0.6;
           disruptionProb = frame.disruption_probability;
-          if (disruptionProb > 0.65) {
+          // Flash on the rising edge into "risky" territory, not on every
+          // tick that happens to stay above threshold — a one-shot pulse
+          // reads as an event; a sustained glow would just look stuck on.
+          if (wasCalm && disruptionProb > 0.6) {
             lastDisruptionFlashAt = performance.now();
           }
         }
-        if (statusEl) {
+        lastFrameReceivedAt = performance.now();
+        if (statusEl && currentMode !== 'live') {
           const fusionPct = typeof frame.fusion_score === 'number' ? (frame.fusion_score * 100).toFixed(0) + '%' : '—';
           statusEl.textContent = `sim step ${frame.step ?? '—'} · fusion ${fusionPct} · disruption ${(disruptionProb * 100).toFixed(0)}%`;
         }
@@ -321,12 +360,20 @@
     let liveAvailable = false;
 
     function applyMode() {
+      // Single source of truth for the toggle: three.js visibility depends
+      // only on `currentMode`, never on whether a live attempt previously
+      // failed — so switching back to Synthetic always cleanly restores the
+      // 3D view, even right after a "no live feed" state.
       const showLive = currentMode === 'live';
       liveLayer.classList.toggle('active', showLive);
       renderer.domElement.style.visibility = showLive ? 'hidden' : 'visible';
       if (showLive) {
         liveEmpty.classList.toggle('show', !liveAvailable);
         liveVideo.style.display = liveAvailable ? 'block' : 'none';
+      } else if (statusEl) {
+        statusEl.textContent = lastFrameReceivedAt
+          ? `sim step — · fusion — · disruption ${(disruptionProb * 100).toFixed(0)}%`
+          : 'sim bridge: waiting…';
       }
     }
 
@@ -372,9 +419,13 @@
       plasma.material.color.copy(plasmaColor);
       plasma.material.emissive.copy(plasmaColor).multiplyScalar(0.35 + heatIntensity * 0.4);
       glowInner.material.color.copy(plasmaColor);
-      glowInner.material.opacity = 0.14 + heatIntensity * 0.22;
+      // Slightly hotter opacity floor/ceiling than the first pass — this
+      // panel typically fills a large bottom-right tile in the control-room
+      // grid, and the additive shells need more presence at that scale to
+      // still read as "glow" rather than a faint tint.
+      glowInner.material.opacity = 0.2 + heatIntensity * 0.26;
       glowOuter.material.color.copy(plasmaColor);
-      glowOuter.material.opacity = 0.06 + heatIntensity * 0.14;
+      glowOuter.material.opacity = 0.09 + heatIntensity * 0.18;
 
       for (let i = 0; i < DIVERTOR_COUNT; i++) {
         const c = heatColor(divertorHeat[i]);
@@ -388,12 +439,26 @@
       oPoint.position.z = 0.2 * Math.sin(t * 0.9);
       ring.lookAt(camera.position);
 
-      // Disruption flash: brief radial red pulse that decays over ~700ms.
+      // Disruption flash: hot white-red pulse, fast attack + quadratic decay
+      // so it reads as a distinct "event" against the steady orange glow
+      // rather than blending into it. ~550ms total, peak near-opaque.
+      const FLASH_MS = 550;
       const sinceFlash = now - lastDisruptionFlashAt;
-      if (sinceFlash >= 0 && sinceFlash < 700) {
-        flashEl.style.opacity = String(0.85 * (1 - sinceFlash / 700));
+      if (sinceFlash >= 0 && sinceFlash < FLASH_MS) {
+        const p = sinceFlash / FLASH_MS;
+        const attack = Math.min(1, sinceFlash / 60); // 60ms ramp up to peak
+        const decay = (1 - p) * (1 - p); // quadratic falloff
+        flashEl.style.opacity = String(Math.min(0.92, attack * decay * 1.15));
       } else {
         flashEl.style.opacity = '0';
+      }
+
+      // Sim-bridge staleness: if web_panel.py's poller hangs/errors for a
+      // while, say so instead of leaving the last-known values frozen with
+      // no indication anything is wrong. The render loop itself never
+      // depends on fresh data, so the scene keeps animating regardless.
+      if (currentMode !== 'live' && lastFrameReceivedAt && now - lastFrameReceivedAt > STALE_AFTER_MS) {
+        statusEl.textContent = 'sim bridge: no data (reconnecting…)';
       }
 
       if (now - lastFpsT >= 1000) {
