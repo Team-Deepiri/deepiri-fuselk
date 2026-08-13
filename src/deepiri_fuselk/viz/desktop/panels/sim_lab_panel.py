@@ -112,8 +112,13 @@ class SimLabPanel(QWidget):
 
     def _reset(self) -> None:
         grid = self._grid.value()
+        device = self._device.currentText() or "ITER"
+        preset = self._preset.currentText() or "H-mode"
         if grid != self._sim.grid_size:
-            self._sim = LiveSimulation(grid_size=grid)
+            self._sim = LiveSimulation(grid_size=grid, device=device, preset=preset)
+        else:
+            self._sim.set_device(device)
+            self._sim.set_preset(preset)
         frame = self._sim.reset(seed=self._seed.value())
         self._show_frame(frame_to_dict(frame))
 
