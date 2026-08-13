@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from deepiri_fuselk.viz.simulation_engine import get_device, get_preset_names, list_device_names
+
 
 class OilWaterPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -23,6 +25,20 @@ class OilWaterPanel(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 16, 16, 16)
         root.addWidget(QLabel("Oil-water vapor barrier PDE solver"))
+
+        device_box = QGroupBox("Device context")
+        device_form = QFormLayout(device_box)
+        self._device = QComboBox()
+        self._device.addItems(list_device_names())
+        self._preset = QComboBox()
+        self._preset.addItems(get_preset_names(self._device.currentText() or "ITER"))
+        self._device_info = QLabel()
+        device_form.addRow("Device:", self._device)
+        device_form.addRow("Preset:", self._preset)
+        device_form.addRow("Geometry:", self._device_info)
+        self._device.currentTextChanged.connect(self._on_device_changed)
+        self._on_device_changed(self._device.currentText())
+        root.addWidget(device_box)
 
         box = QGroupBox("Parameters")
         form = QFormLayout(box)
@@ -42,6 +58,17 @@ class OilWaterPanel(QWidget):
         root.addWidget(self._btn)
         root.addWidget(self._out, stretch=1)
         self._btn.clicked.connect(self._run)
+
+    def _on_device_changed(self, name: str) -> None:
+        if not name:
+            return
+        dev = get_device(name)
+        self._preset.clear()
+        self._preset.addItems(get_preset_names(name))
+        self._device_info.setText(
+            f"R0={dev.major_radius_m:.2f} m, a={dev.minor_radius_m:.2f} m, "
+            f"κ={dev.elongation:.2f}, δ={dev.triangularity:.2f}"
+        )
 
     def _run(self) -> None:
         from deepiri_fuselk.physics.pde_solver import (
