@@ -15,7 +15,12 @@ from pydantic import BaseModel, Field
 from deepiri_fuselk import __version__
 from deepiri_fuselk.experiments.registry import load_registry
 from deepiri_fuselk.experiments.runner import run_experiment
-from deepiri_fuselk.viz.simulation_engine import LiveSimulation, SimulationFrame
+from deepiri_fuselk.viz.simulation_engine import (
+    LiveSimulation,
+    SimulationFrame,
+    get_preset_names,
+    list_device_names,
+)
 
 _STATIC = Path(__file__).resolve().parent / "static"
 _STATIC_ROOT = _STATIC.resolve()
@@ -44,6 +49,29 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         "divertor_uniformity": frame.divertor_uniformity,
         "disruption_probability": frame.disruption.probability,
         "elm_probability": frame.elm.probability,
+        "active_device": frame.active_device.name,
+        "active_preset": frame.active_preset,
+        "ip_ma": frame.ip_ma,
+        "beta_n": frame.beta_n,
+        "li": frame.li,
+        "d_alpha": frame.d_alpha,
+        "q95": frame.q95,
+        "greenwald_fraction": frame.greenwald_fraction,
+        "te0_kev": frame.te0_kev,
+        "ne_bar_1e19": frame.ne_bar_1e19,
+        "w_th_mj": frame.w_th_mj,
+        "tau_e_s": frame.tau_e_s,
+        "p_oh_mw": frame.p_oh_mw,
+        "p_nbi_mw": frame.p_nbi_mw,
+        "p_ech_mw": frame.p_ech_mw,
+        "p_rad_mw": frame.p_rad_mw,
+        "p_loss_mw": frame.p_loss_mw,
+        "neutron_rate_1e18": frame.neutron_rate_1e18,
+        "q_plasma": frame.q_plasma,
+        "target_ip_ma": frame.target_ip_ma,
+        "target_beta_n": frame.target_beta_n,
+        "target_li": frame.target_li,
+        "target_d_alpha": frame.target_d_alpha,
         "helix": {
             "o_point": list(frame.helix.o_point),
             "phase_locked_snr": frame.helix.phase_locked_snr,
@@ -59,6 +87,16 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
 class SimConfig(BaseModel):
     grid_size: int = Field(default=24, ge=8, le=64)
     seed: int = 0
+    device: str = "DEFAULT"
+    preset: str = "H-mode"
+
+
+class DeviceSelect(BaseModel):
+    device: str
+
+
+class PresetSelect(BaseModel):
+    preset: str
 
 
 class FusionRunRequest(BaseModel):
@@ -131,8 +169,28 @@ def create_api() -> FastAPI:
         cfg = config or SimConfig()
         global _sim
         if cfg.grid_size != _sim.grid_size:
-            _sim = LiveSimulation(grid_size=cfg.grid_size)
+            _sim = LiveSimulation(grid_size=cfg.grid_size, device=cfg.device, preset=cfg.preset)
+        else:
+            _sim.set_device(cfg.device)
+            _sim.set_preset(cfg.preset)
         return frame_to_dict(_sim.reset(seed=cfg.seed))
+
+    @api.get("/api/devices")
+    def devices_list() -> dict[str, Any]:
+        return {
+            "devices": list_device_names(),
+            "presets": get_preset_names("ITER"),
+        }
+
+    @api.post("/api/sim/device")
+    def sim_set_device(req: DeviceSelect) -> dict[str, Any]:
+        _sim.set_device(req.device)
+        return frame_to_dict(_sim.step())
+
+    @api.post("/api/sim/preset")
+    def sim_set_preset(req: PresetSelect) -> dict[str, Any]:
+        _sim.set_preset(req.preset)
+        return frame_to_dict(_sim.step())
 
     @api.post("/api/sim/fusion-run")
     def sim_fusion_run(req: FusionRunRequest) -> dict[str, Any]:
