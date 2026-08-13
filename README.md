@@ -7,9 +7,7 @@
 
 ---
 <img width="400" height="400" alt="image" src="https://github.com/user-attachments/assets/bb1beff7-8998-4b92-9e1b-8ffcd56fc71e" />
-
-
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e8c61803-e23d-4c4b-872e-d38ea81f5aaf" />
+<img width="1914" height="1013" alt="image" src="https://github.com/user-attachments/assets/ebb61c24-81eb-48e5-9be6-b212284f7e98" />
 
 
 The fusion community has OpenMC (neutronics), IMAS (data), and BLUEMIRA (design). None of them solve the hardest live problem: **predicting, controlling, and preventing ELMs and disruptions in real time** while closing the tritium fuel cycle.
