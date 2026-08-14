@@ -30,6 +30,7 @@ from deepiri_fuselk.viz.desktop.panels import (
     MuonPanel,
     OilWaterPanel,
     SimLabPanel,
+    TutorialDialog,
     WebPanel,
 )
 from deepiri_fuselk.viz.desktop.styles import SHELL_QSS
@@ -228,6 +229,16 @@ class MainShell(QMainWindow):
             action.setShortcut(QKeySequence(f"Ctrl+{i}"))
             action.triggered.connect(lambda _c=False, k=entry.key: self._go_to(k))
             nav_menu.addAction(action)
+
+        help_menu = self.menuBar().addMenu("&Help")
+        tutorial_action = QAction("Tutorial…", self)
+        tutorial_action.setShortcut(QKeySequence("F1"))
+        tutorial_action.triggered.connect(self._show_tutorial)
+        help_menu.addAction(tutorial_action)
+
+    def _show_tutorial(self) -> None:
+        dialog = TutorialDialog(self)
+        dialog.exec()
 
     def _on_nav_changed(self, row: int) -> None:
         if row < 0:

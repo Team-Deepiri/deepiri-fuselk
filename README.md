@@ -62,6 +62,12 @@ fuselk data manifest                  # what was fetched
 
 See [docs/DATA_PIPELINE.md](docs/DATA_PIPELINE.md) for sources, formats, and ingest flow.
 
+In `fuselk gui`, use the device dropdown to switch the active machine
+(ITER / JET / DIII-D) and load a preset (H-mode / L-mode / density limit) —
+the equilibrium, trace, status, and port view panels all update with
+device-appropriate numbers and limits. New to the control room? Open
+**Help → Tutorial…** (`F1`) for a guided walkthrough of each panel.
+
 ## Experiments
 
 | ID | Status | Description |

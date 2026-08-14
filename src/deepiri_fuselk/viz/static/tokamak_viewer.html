@@ -79,6 +79,76 @@
     @media (prefers-reduced-motion: reduce) {
       #hud button { background: transparent; border: 1px solid var(--border); }
     }
+    #mode-row { margin-top: 12px; display: flex; gap: 6px; }
+    #hud select {
+      margin-top: 10px;
+      width: 100%;
+      background: #10141f;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 5px 8px;
+      font: inherit;
+      font-size: 0.78rem;
+    }
+    #status-line { margin-top: 8px; font-size: 0.7rem; color: var(--muted); line-height: 1.4; }
+    #disruption-flash {
+      position: absolute;
+      inset: 0;
+      z-index: 5;
+      background:
+        radial-gradient(ellipse at 50% 45%, rgba(255, 255, 245, 0.5) 0%, rgba(255, 70, 40, 0.55) 30%, rgba(255, 40, 30, 0) 72%);
+      opacity: 0;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+    #live-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: none;
+      background: radial-gradient(ellipse at 50% 30%, var(--bg-a) 0%, var(--bg-b) 70%);
+      align-items: center;
+      justify-content: center;
+    }
+    #live-layer.active { display: flex; }
+    #live-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: contrast(1.05) saturate(1.05);
+    }
+    #live-empty {
+      position: relative;
+      color: var(--text);
+      font-size: 0.85rem;
+      text-align: center;
+      max-width: min(420px, 70vw);
+      display: none;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow: var(--shadow);
+      line-height: 1.55;
+    }
+    #live-empty.show { display: block; }
+    #live-empty .big {
+      font-size: 1.8rem;
+      display: block;
+      margin-bottom: 10px;
+      filter: grayscale(0.2) opacity(0.85);
+    }
+    #live-empty .title {
+      display: block;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+      font-size: 0.92rem;
+    }
+    #live-empty .sub { color: var(--muted); font-size: 0.76rem; }
   </style>
 </head>
 <body>
@@ -89,17 +159,39 @@
       <div><span class="dot" style="background:#4488ff"></span>Vessel (wireframe)</div>
       <div><span class="dot" style="background:#ff6622"></span>Plasma core</div>
       <div><span class="dot" style="background:#ff3344"></span>HELIX O-point lock</div>
+      <div><span class="dot" style="background:#ffcc33"></span>Divertor heat flux</div>
     </div>
     <button id="pause-btn" type="button">Pause</button>
+    <div id="mode-row">
+      <select id="mode-select">
+        <option value="synthetic" selected>Synthetic render</option>
+        <option value="live">Live camera feed</option>
+      </select>
+    </div>
+    <div id="status-line">sim bridge: waiting…</div>
   </div>
   <div id="fps">— fps</div>
+  <div id="disruption-flash"></div>
+  <div id="live-layer">
+    <img id="live-video" alt="Live port view feed" />
+    <div id="live-empty">
+      <span class="big">📷</span>
+      <span class="title">No live feed detected</span>
+      <span class="sub">Connect a webcam or RTSP/MJPEG source, then switch back to
+      Live camera feed — or stay on Synthetic render.</span>
+    </div>
+  </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // Slightly narrower FOV than the old 58° — this panel is typically a
+    // large *wide* rectangle (bottom-right of the control-room grid), not
+    // square, so a tighter FOV plus the pulled-back camera below keeps the
+    // torus fully framed without fisheye distortion on ultra-wide panels.
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     document.body.appendChild(renderer.domElement);
 
     const ambient = new THREE.AmbientLight(0x334466, 0.6);
@@ -107,6 +199,80 @@
     const key = new THREE.PointLight(0x88aaff, 1.2, 40);
     key.position.set(4, 3, 6);
     scene.add(key);
+    // Low fill light from below the divertor ring so the heat-flux colours
+    // on the plates read clearly even when the panel is much wider than tall.
+    const fill = new THREE.PointLight(0xffaa66, 0.5, 30);
+    fill.position.set(-3, -2, 4);
+    scene.add(fill);
+    // Rim light behind the camera so the vessel-wall paneling/portholes
+    // catch enough grazing light to read as structure, not flat black.
+    const rim = new THREE.PointLight(0x445566, 0.9, 40);
+    rim.position.set(0, 4, 12);
+    scene.add(rim);
+
+    // Vessel wall backdrop: a large tiled/paneled cylinder enclosing the whole
+    // scene, camera-facing inward (BackSide), so the port view reads as a real
+    // diagnostic port looking into a segmented steel vessel — not just an
+    // abstract torus floating on black. Procedurally generated so no external
+    // texture assets are needed (keeps the panel fully self-contained).
+    function makeVesselTexture() {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#1b1d22';
+      ctx.fillRect(0, 0, size, size);
+
+      const cols = 28, rows = 14;
+      const cw = size / cols, ch = size / rows;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const shade = 26 + Math.floor(Math.random() * 10);
+          ctx.fillStyle = `rgb(${shade + 4},${shade + 4},${shade + 6})`;
+          ctx.fillRect(c * cw + 1, r * ch + 1, cw - 2, ch - 2);
+          // Rivet dots at panel corners.
+          ctx.fillStyle = 'rgba(10,10,12,0.9)';
+          const rivR = 2.4;
+          ctx.beginPath(); ctx.arc(c * cw + 5, r * ch + 5, rivR, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc((c + 1) * cw - 5, r * ch + 5, rivR, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      // Panel seams.
+      ctx.strokeStyle = 'rgba(5,5,7,0.85)';
+      ctx.lineWidth = 2;
+      for (let c = 0; c <= cols; c++) { ctx.beginPath(); ctx.moveTo(c * cw, 0); ctx.lineTo(c * cw, size); ctx.stroke(); }
+      for (let r = 0; r <= rows; r++) { ctx.beginPath(); ctx.moveTo(0, r * ch); ctx.lineTo(size, r * ch); ctx.stroke(); }
+
+      // A handful of dark diagnostic portholes, scattered off-centre so they
+      // read at a glance without competing with the plasma glow.
+      const ports = [[0.18, 0.42, 34], [0.82, 0.38, 26], [0.62, 0.68, 20], [0.34, 0.72, 16]];
+      for (const [px, py, pr] of ports) {
+        const grad = ctx.createRadialGradient(px * size, py * size, 0, px * size, py * size, pr * 1.6);
+        grad.addColorStop(0, 'rgba(2,2,3,0.95)');
+        grad.addColorStop(1, 'rgba(2,2,3,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(px * size, py * size, pr * 1.6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#050506';
+        ctx.beginPath(); ctx.arc(px * size, py * size, pr, 0, Math.PI * 2); ctx.fill();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(3, 1);
+      return tex;
+    }
+
+    const vessel = new THREE.Mesh(
+      new THREE.CylinderGeometry(7.2, 7.2, 15, 64, 1, true),
+      new THREE.MeshStandardMaterial({
+        map: makeVesselTexture(),
+        side: THREE.BackSide,
+        roughness: 0.82,
+        metalness: 0.35,
+        color: 0x9aa4b5,
+      })
+    );
+    scene.add(vessel);
 
     const torus = new THREE.Mesh(
       new THREE.TorusGeometry(3, 1, 20, 120),
@@ -120,11 +286,20 @@
     );
     scene.add(plasma);
 
-    const glow = new THREE.Mesh(
-      new THREE.SphereGeometry(1.05, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0xff4400, transparent: true, opacity: 0.12 })
+    // Layered additive glow shells act as a cheap bloom for the plasma core —
+    // no postprocessing pipeline needed, three stacked shells with falling
+    // opacity read as a soft glow at any camera distance.
+    const glowInner = new THREE.Mesh(
+      new THREE.SphereGeometry(1.0, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false })
     );
-    scene.add(glow);
+    scene.add(glowInner);
+    const glowOuter = new THREE.Mesh(
+      new THREE.SphereGeometry(1.35, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.08, blending: THREE.AdditiveBlending, depthWrite: false })
+    );
+    scene.add(glowOuter);
+    const glow = glowInner; // legacy alias used by scale-follow code below
 
     const oPoint = new THREE.Mesh(
       new THREE.SphereGeometry(0.14, 16, 16),
@@ -138,14 +313,157 @@
     );
     oPoint.add(ring);
 
-    camera.position.set(0, 1.2, 8.5);
-    camera.lookAt(0, 0, 0);
+    // Divertor strike-point plates: a ring of small tiles around the lower
+    // torus rim whose colour is driven by real heat-flux data (blue -> cyan
+    // -> yellow -> red/white), like the divertor targets in a real tokamak.
+    const DIVERTOR_COUNT = 24;
+    const divertorPlates = [];
+    const divertorGroup = new THREE.Group();
+    for (let i = 0; i < DIVERTOR_COUNT; i++) {
+      const angle = (i / DIVERTOR_COUNT) * Math.PI * 2;
+      const plate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.14, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x2255aa, emissive: 0x001133, roughness: 0.55, metalness: 0.35 })
+      );
+      const r = 3.55;
+      plate.position.set(Math.cos(angle) * r, -1.05, Math.sin(angle) * r);
+      plate.lookAt(0, -1.05, 0);
+      divertorGroup.add(plate);
+      divertorPlates.push(plate);
+    }
+    scene.add(divertorGroup);
+
+    // Heat-flux colour ramp: blue -> cyan -> yellow -> red -> white.
+    const HEAT_STOPS = [
+      { t: 0.0, c: new THREE.Color(0x1144aa) },
+      { t: 0.35, c: new THREE.Color(0x22ccdd) },
+      { t: 0.6, c: new THREE.Color(0xffdd33) },
+      { t: 0.85, c: new THREE.Color(0xff3311) },
+      { t: 1.0, c: new THREE.Color(0xffffff) },
+    ];
+    function heatColor(v) {
+      const x = Math.min(1, Math.max(0, v));
+      for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
+        const a = HEAT_STOPS[i];
+        const b = HEAT_STOPS[i + 1];
+        if (x >= a.t && x <= b.t) {
+          const local = (x - a.t) / Math.max(1e-6, b.t - a.t);
+          return a.c.clone().lerp(b.c, local);
+        }
+      }
+      return HEAT_STOPS[HEAT_STOPS.length - 1].c.clone();
+    }
+
+    camera.position.set(0, 1.3, 9.6);
+    camera.lookAt(0, -0.1, 0);
 
     let playing = true;
     document.getElementById('pause-btn').addEventListener('click', () => {
       playing = !playing;
       document.getElementById('pause-btn').textContent = playing ? 'Pause' : 'Resume';
     });
+
+    // ---- Real-data bridge state (pushed from web_panel.py via runJavaScript) ----
+    // Normalised [0,1] plasma intensity + per-plate heat samples, updated by
+    // window.__fuselk_updateFrame(frame). Defaults keep the pre-existing
+    // procedural look until the first real frame arrives.
+    let heatIntensity = 0.45; // drives plasma glow brightness/colour
+    let divertorHeat = new Array(DIVERTOR_COUNT).fill(0.3);
+    let disruptionProb = 0;
+    let lastDisruptionFlashAt = -1e9;
+    let lastFrameReceivedAt = 0; // 0 = never received a real frame yet
+    const flashEl = document.getElementById('disruption-flash');
+    const statusEl = document.getElementById('status-line');
+    const STALE_AFTER_MS = 3000; // if web_panel.py's bridge stalls, say so instead of freezing silently
+
+    function flattenHeat(arr) {
+      // raw_heat / controlled_heat arrive as a 2D grid (list of lists);
+      // flatten defensively so this also tolerates a flat array.
+      const out = [];
+      const walk = (v) => {
+        if (Array.isArray(v)) { v.forEach(walk); } else if (typeof v === 'number') { out.push(v); }
+      };
+      walk(arr);
+      return out;
+    }
+
+    window.__fuselk_updateFrame = function (frame) {
+      try {
+        const flat = flattenHeat(frame.controlled_heat || frame.raw_heat || []);
+        if (flat.length) {
+          const max = Math.max(...flat, 1e-6);
+          const mean = flat.reduce((s, v) => s + v, 0) / flat.length;
+          heatIntensity = Math.min(1, mean / max);
+          // Resample the flattened grid onto the divertor ring by nearest index.
+          for (let i = 0; i < DIVERTOR_COUNT; i++) {
+            const idx = Math.floor((i / DIVERTOR_COUNT) * flat.length);
+            divertorHeat[i] = Math.min(1, (flat[idx] || 0) / max);
+          }
+        }
+        if (typeof frame.disruption_probability === 'number') {
+          const wasCalm = disruptionProb <= 0.6;
+          disruptionProb = frame.disruption_probability;
+          // Flash on the rising edge into "risky" territory, not on every
+          // tick that happens to stay above threshold — a one-shot pulse
+          // reads as an event; a sustained glow would just look stuck on.
+          if (wasCalm && disruptionProb > 0.6) {
+            lastDisruptionFlashAt = performance.now();
+          }
+        }
+        lastFrameReceivedAt = performance.now();
+        if (statusEl && currentMode !== 'live') {
+          const fusionPct = typeof frame.fusion_score === 'number' ? (frame.fusion_score * 100).toFixed(0) + '%' : '—';
+          statusEl.textContent = `sim step ${frame.step ?? '—'} · fusion ${fusionPct} · disruption ${(disruptionProb * 100).toFixed(0)}%`;
+        }
+      } catch (err) {
+        // Never let a malformed payload break the render loop.
+        console.warn('fuselk: bad sim frame', err);
+      }
+    };
+
+    // ---- Live video feed bridge ----
+    const liveLayer = document.getElementById('live-layer');
+    const liveVideo = document.getElementById('live-video');
+    const liveEmpty = document.getElementById('live-empty');
+    let currentMode = 'synthetic';
+    let liveAvailable = false;
+
+    function applyMode() {
+      // Single source of truth for the toggle: three.js visibility depends
+      // only on `currentMode`, never on whether a live attempt previously
+      // failed — so switching back to Synthetic always cleanly restores the
+      // 3D view, even right after a "no live feed" state.
+      const showLive = currentMode === 'live';
+      liveLayer.classList.toggle('active', showLive);
+      renderer.domElement.style.visibility = showLive ? 'hidden' : 'visible';
+      if (showLive) {
+        liveEmpty.classList.toggle('show', !liveAvailable);
+        liveVideo.style.display = liveAvailable ? 'block' : 'none';
+      } else if (statusEl) {
+        statusEl.textContent = lastFrameReceivedAt
+          ? `sim step — · fusion — · disruption ${(disruptionProb * 100).toFixed(0)}%`
+          : 'sim bridge: waiting…';
+      }
+    }
+
+    document.getElementById('mode-select').addEventListener('change', (ev) => {
+      currentMode = ev.target.value;
+      applyMode();
+    });
+
+    window.__fuselk_setLiveFrame = function (dataUrl) {
+      liveAvailable = true;
+      liveVideo.src = dataUrl;
+      if (currentMode === 'live') applyMode();
+    };
+
+    window.__fuselk_setLiveStatus = function (available, statusText) {
+      liveAvailable = !!available;
+      if (statusEl && currentMode === 'live') {
+        statusEl.textContent = 'live feed: ' + (statusText || (available ? 'active' : 'unavailable'));
+      }
+      applyMode();
+    };
 
     let t0 = performance.now();
     let frames = 0;
@@ -159,12 +477,59 @@
       const t = lastT * 0.001;
       torus.rotation.y += 0.004;
       torus.rotation.x = Math.sin(t * 0.3) * 0.08;
-      plasma.scale.setScalar(1 + Math.sin(t * 2.2) * 0.04);
-      glow.scale.copy(plasma.scale).multiplyScalar(1.15);
+
+      const pulse = 1 + Math.sin(t * 2.2) * 0.04;
+      const heatScale = 0.9 + heatIntensity * 0.35;
+      plasma.scale.setScalar(pulse * heatScale);
+      glowInner.scale.copy(plasma.scale).multiplyScalar(1.15 + heatIntensity * 0.25);
+      glowOuter.scale.copy(plasma.scale).multiplyScalar(1.55 + heatIntensity * 0.4);
+
+      const plasmaColor = heatColor(0.3 + heatIntensity * 0.7);
+      plasma.material.color.copy(plasmaColor);
+      plasma.material.emissive.copy(plasmaColor).multiplyScalar(0.35 + heatIntensity * 0.4);
+      glowInner.material.color.copy(plasmaColor);
+      // Slightly hotter opacity floor/ceiling than the first pass — this
+      // panel typically fills a large bottom-right tile in the control-room
+      // grid, and the additive shells need more presence at that scale to
+      // still read as "glow" rather than a faint tint.
+      glowInner.material.opacity = 0.2 + heatIntensity * 0.26;
+      glowOuter.material.color.copy(plasmaColor);
+      glowOuter.material.opacity = 0.09 + heatIntensity * 0.18;
+
+      for (let i = 0; i < DIVERTOR_COUNT; i++) {
+        const c = heatColor(divertorHeat[i]);
+        const mat = divertorPlates[i].material;
+        mat.color.copy(c);
+        mat.emissive.copy(c).multiplyScalar(0.25 + divertorHeat[i] * 0.5);
+      }
+
       oPoint.position.x = 2.45 * Math.cos(t * 1.1);
       oPoint.position.y = 0.35 * Math.sin(t * 1.6);
       oPoint.position.z = 0.2 * Math.sin(t * 0.9);
       ring.lookAt(camera.position);
+
+      // Disruption flash: hot white-red pulse, fast attack + quadratic decay
+      // so it reads as a distinct "event" against the steady orange glow
+      // rather than blending into it. ~550ms total, peak near-opaque.
+      const FLASH_MS = 550;
+      const sinceFlash = now - lastDisruptionFlashAt;
+      if (sinceFlash >= 0 && sinceFlash < FLASH_MS) {
+        const p = sinceFlash / FLASH_MS;
+        const attack = Math.min(1, sinceFlash / 60); // 60ms ramp up to peak
+        const decay = (1 - p) * (1 - p); // quadratic falloff
+        flashEl.style.opacity = String(Math.min(0.92, attack * decay * 1.15));
+      } else {
+        flashEl.style.opacity = '0';
+      }
+
+      // Sim-bridge staleness: if web_panel.py's poller hangs/errors for a
+      // while, say so instead of leaving the last-known values frozen with
+      // no indication anything is wrong. The render loop itself never
+      // depends on fresh data, so the scene keeps animating regardless.
+      if (currentMode !== 'live' && lastFrameReceivedAt && now - lastFrameReceivedAt > STALE_AFTER_MS) {
+        statusEl.textContent = 'sim bridge: no data (reconnecting…)';
+      }
+
       if (now - lastFpsT >= 1000) {
         fpsEl.textContent = (frames * 1000 / (now - lastFpsT)).toFixed(0) + ' fps';
         frames = 0;

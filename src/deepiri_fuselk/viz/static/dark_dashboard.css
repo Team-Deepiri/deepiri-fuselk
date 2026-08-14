@@ -1,0 +1,65 @@
+/* Dark-theme overrides for the fuselk Dash control room.
+ *
+ * dcc.Dropdown renders react-select markup that ignores inline `style`
+ * props for its internals (menu, options, placeholder text), so it shows up
+ * light-on-light by default even inside an otherwise dark page. This file
+ * (loaded automatically by Dash from the assets folder) retints those
+ * internals to match the rest of the control room.
+ */
+
+body {
+  background-color: #0f1117;
+}
+
+.Select-control,
+.Select--single > .Select-control,
+.Select.is-focused > .Select-control {
+  background-color: #1a1d27 !important;
+  border-color: #2a2d37 !important;
+  color: #e8e8e8 !important;
+}
+
+.Select-value-label,
+.Select-placeholder,
+.Select-input input {
+  color: #e8e8e8 !important;
+}
+
+.Select-menu-outer {
+  background-color: #1a1d27 !important;
+  border-color: #2a2d37 !important;
+  color: #e8e8e8 !important;
+}
+
+.VirtualizedSelectOption {
+  background-color: #1a1d27 !important;
+  color: #e8e8e8 !important;
+}
+
+.VirtualizedSelectFocusedOption {
+  background-color: #2a2d37 !important;
+}
+
+.Select-arrow {
+  border-color: #888 transparent transparent !important;
+}
+
+.fuselk-toolbar-btn {
+  background: #1a1d27;
+  color: #e8e8e8;
+  border: 1px solid #2a2d37;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.fuselk-toolbar-btn.active {
+  background: #4488ff;
+  border-color: #4488ff;
+  color: #fff;
+}
+
+.fuselk-toolbar-btn:hover {
+  border-color: #4488ff;
+}

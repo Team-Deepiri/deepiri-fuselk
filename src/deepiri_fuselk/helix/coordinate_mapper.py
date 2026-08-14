@@ -25,8 +25,15 @@ def boozer_map(
     return theta, phi
 
 
-def field_line_pitch(R: np.ndarray, Z: np.ndarray, q0: float = 1.0, q95: float = 3.5) -> np.ndarray:
-    """Local field line pitch angle for HQRM rotation."""
+def field_line_pitch(
+    R: np.ndarray, Z: np.ndarray, q0: float = 1.0, q95: float = 3.5, a: float = 1.0
+) -> np.ndarray:
+    """Local field line pitch angle for HQRM rotation.
+
+    ``a`` is the plasma minor radius used to normalize the safety-factor
+    profile (see `q_profile`); it defaults to 1.0 to match the previous
+    implicit behavior (unit-normalized minor radius).
+    """
     r = np.sqrt(R**2 + Z**2)
-    q = q_profile(r, q0=q0, q95=q95)
+    q = q_profile(r, q0=q0, q95=q95, a=a)
     return np.arctan2(1.0, q)
