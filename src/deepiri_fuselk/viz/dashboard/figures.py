@@ -450,3 +450,96 @@ def build_status_panel_figure(frame: SimulationFrame) -> go.Figure:
         margin={"t": 24, "b": 8, "l": 16, "r": 16},
     )
     return fig
+
+
+OSCILLOSCOPE_FIELDS: dict[str, dict[str, str]] = {
+    "Ip (MA)": {"actual": "ip_ma", "target": "target_ip_ma"},
+    "betaN": {"actual": "beta_n", "target": "target_beta_n"},
+    "Dalpha (a.u.)": {"actual": "d_alpha", "target": "target_d_alpha"},
+    "Wth (MJ)": {"actual": "w_th_mj", "target": "w_th_mj"},
+}
+
+
+def build_oscilloscope_figure(
+    history: list[dict],
+    selected: list[str] | None = None,
+    scrub_range: tuple[float, float] | None = None,
+    dt_s: float = 0.1,
+) -> go.Figure:
+    """Stacked oscilloscope-style trace column: one labeled sub-row per trace.
+
+    Each sub-row shows dashed target vs solid actual over pulse time (in
+    seconds, ``step * dt_s``), with the current value annotated at the right
+    edge of its row — matching the reference simulator's trace stack.
+    """
+    selected = selected or list(OSCILLOSCOPE_FIELDS.keys())
+    n = max(len(selected), 1)
+    fig = make_subplots(
+        rows=n,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.06 if n > 1 else 0.0,
+    )
+    colors = [ACCENT, ACCENT_ALT, OK, WARN]
+    times = [h["step"] * dt_s for h in history]
+
+    for row, key in enumerate(selected, start=1):
+        spec = OSCILLOSCOPE_FIELDS.get(key)
+        if spec is None:
+            continue
+        color = colors[(row - 1) % len(colors)]
+        actual = [h.get(spec["actual"], 0.0) for h in history]
+        target = [h.get(spec["target"], 0.0) for h in history]
+        fig.add_trace(
+            go.Scatter(
+                x=times,
+                y=actual,
+                mode="lines",
+                line={"color": color, "width": 2},
+                name=f"{key} actual",
+                showlegend=False,
+            ),
+            row=row,
+            col=1,
+        )
+        if spec["actual"] != spec["target"]:
+            fig.add_trace(
+                go.Scatter(
+                    x=times,
+                    y=target,
+                    mode="lines",
+                    line={"color": color, "width": 1.5, "dash": "dash"},
+                    name=f"{key} target",
+                    showlegend=False,
+                ),
+                row=row,
+                col=1,
+            )
+        current = actual[-1] if actual else 0.0
+        fig.update_yaxes(title_text=key, title_font={"size": 10, "color": MUTED}, row=row, col=1)
+        fig.add_annotation(
+            text=f"{current:.2f}",
+            xref="x domain",
+            yref=f"y{row}" if row > 1 else "y",
+            x=1.0,
+            y=current,
+            xanchor="left",
+            showarrow=False,
+            font={"color": color, "size": 12},
+            row=row,
+            col=1,
+        )
+
+    if scrub_range is not None:
+        fig.update_xaxes(range=list(scrub_range))
+    fig.update_xaxes(title_text="t (s)", row=n, col=1)
+
+    fig.update_layout(
+        height=max(280, 90 * n),
+        paper_bgcolor=CARD,
+        plot_bgcolor=BG,
+        margin={"t": 16, "b": 32, "l": 16, "r": 48},
+        dragmode="zoom",
+        **PLOT_THEME,
+    )
+    return fig
