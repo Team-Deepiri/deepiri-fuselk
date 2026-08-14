@@ -204,6 +204,75 @@
     const fill = new THREE.PointLight(0xffaa66, 0.5, 30);
     fill.position.set(-3, -2, 4);
     scene.add(fill);
+    // Rim light behind the camera so the vessel-wall paneling/portholes
+    // catch enough grazing light to read as structure, not flat black.
+    const rim = new THREE.PointLight(0x445566, 0.9, 40);
+    rim.position.set(0, 4, 12);
+    scene.add(rim);
+
+    // Vessel wall backdrop: a large tiled/paneled cylinder enclosing the whole
+    // scene, camera-facing inward (BackSide), so the port view reads as a real
+    // diagnostic port looking into a segmented steel vessel — not just an
+    // abstract torus floating on black. Procedurally generated so no external
+    // texture assets are needed (keeps the panel fully self-contained).
+    function makeVesselTexture() {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#1b1d22';
+      ctx.fillRect(0, 0, size, size);
+
+      const cols = 28, rows = 14;
+      const cw = size / cols, ch = size / rows;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const shade = 26 + Math.floor(Math.random() * 10);
+          ctx.fillStyle = `rgb(${shade + 4},${shade + 4},${shade + 6})`;
+          ctx.fillRect(c * cw + 1, r * ch + 1, cw - 2, ch - 2);
+          // Rivet dots at panel corners.
+          ctx.fillStyle = 'rgba(10,10,12,0.9)';
+          const rivR = 2.4;
+          ctx.beginPath(); ctx.arc(c * cw + 5, r * ch + 5, rivR, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc((c + 1) * cw - 5, r * ch + 5, rivR, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      // Panel seams.
+      ctx.strokeStyle = 'rgba(5,5,7,0.85)';
+      ctx.lineWidth = 2;
+      for (let c = 0; c <= cols; c++) { ctx.beginPath(); ctx.moveTo(c * cw, 0); ctx.lineTo(c * cw, size); ctx.stroke(); }
+      for (let r = 0; r <= rows; r++) { ctx.beginPath(); ctx.moveTo(0, r * ch); ctx.lineTo(size, r * ch); ctx.stroke(); }
+
+      // A handful of dark diagnostic portholes, scattered off-centre so they
+      // read at a glance without competing with the plasma glow.
+      const ports = [[0.18, 0.42, 34], [0.82, 0.38, 26], [0.62, 0.68, 20], [0.34, 0.72, 16]];
+      for (const [px, py, pr] of ports) {
+        const grad = ctx.createRadialGradient(px * size, py * size, 0, px * size, py * size, pr * 1.6);
+        grad.addColorStop(0, 'rgba(2,2,3,0.95)');
+        grad.addColorStop(1, 'rgba(2,2,3,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(px * size, py * size, pr * 1.6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#050506';
+        ctx.beginPath(); ctx.arc(px * size, py * size, pr, 0, Math.PI * 2); ctx.fill();
+      }
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(3, 1);
+      return tex;
+    }
+
+    const vessel = new THREE.Mesh(
+      new THREE.CylinderGeometry(7.2, 7.2, 15, 64, 1, true),
+      new THREE.MeshStandardMaterial({
+        map: makeVesselTexture(),
+        side: THREE.BackSide,
+        roughness: 0.82,
+        metalness: 0.35,
+        color: 0x9aa4b5,
+      })
+    );
+    scene.add(vessel);
 
     const torus = new THREE.Mesh(
       new THREE.TorusGeometry(3, 1, 20, 120),
