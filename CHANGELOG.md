@@ -5,7 +5,7 @@
 ### Added
 - **Shot-faithful replay** — `ShotPipeline` accepts IMAS heat fields; `ReactorCell.attach_shot` / `DigitalTwin.attach_shot`; `ShotReplayer` scrubber; CLI `fuselk reactor replay`
 - **ODL public benchmark** — `sim/odl_benchmark.py` + `fuselk sim odl-benchmark` scores P_dis vs C-Mod density-limit labels
-- **Port-view radiance Phase 5** — `viz/radiance.py` (bremsstrahlung, Dα Doppler, blackbody divertor RGB) with unit tests
+- **Port-view radiance Phases 5–8** — `viz/radiance.py` (bremsstrahlung, Dα Doppler, blackbody divertor); `P_rad` from same continuum model; API pushes `radiance` + `device_shape`; tokamak viewer uses physics colours + elongated plasma glow; conservation tests across ITER/JET/DIII-D × presets
 
 ## [0.5.2] - 2026-06-24
 
