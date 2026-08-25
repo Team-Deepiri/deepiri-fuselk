@@ -40,6 +40,7 @@ stable-baselines3 = "^2.3"
 pyzmq = "^25.1"
 pyarrow = "^15.0"
 pyyaml = "^6.0"
+fpdf2 = "^2.8.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
