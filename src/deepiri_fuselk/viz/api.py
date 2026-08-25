@@ -80,6 +80,13 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         "target_beta_n": frame.target_beta_n,
         "target_li": frame.target_li,
         "target_d_alpha": frame.target_d_alpha,
+        "mode": frame.mode,
+        "shot_id": frame.shot_id,
+        "scrub_index": frame.scrub_index,
+        "scrub_n": frame.scrub_n,
+        "time_s": frame.time_s,
+        "odl_label": frame.odl_label,
+        "density": frame.density,
         "helix": {
             "o_point": list(frame.helix.o_point),
             "phase_locked_snr": frame.helix.phase_locked_snr,
@@ -130,6 +137,18 @@ class WorkbenchRequest(BaseModel):
     n_steps: int = Field(default=24, ge=2, le=128)
     data_root: str | None = None
     ensure_data: bool = False
+
+
+class AttachShotRequest(BaseModel):
+    shot: str
+    n_steps: int = Field(default=24, ge=2, le=128)
+    data_root: str | None = None
+    ensure_data: bool = False
+    seed: int = 42
+
+
+class SeekRequest(BaseModel):
+    index: int = Field(ge=0)
 
 
 def create_api() -> FastAPI:
@@ -194,6 +213,7 @@ def create_api() -> FastAPI:
         if cfg.grid_size != _sim.grid_size:
             _sim = LiveSimulation(grid_size=cfg.grid_size, device=cfg.device, preset=cfg.preset)
         else:
+            _sim.clear_scrub()
             _sim.set_device(cfg.device)
             _sim.set_preset(cfg.preset)
         return frame_to_dict(_sim.reset(seed=cfg.seed))
@@ -214,6 +234,36 @@ def create_api() -> FastAPI:
     def sim_set_preset(req: PresetSelect) -> dict[str, Any]:
         _sim.set_preset(req.preset)
         return frame_to_dict(_sim.step())
+
+    @api.post("/api/sim/attach-shot")
+    def sim_attach_shot(req: AttachShotRequest) -> dict[str, Any]:
+        root = Path(req.data_root) if req.data_root else None
+        try:
+            frame = _sim.attach_shot(
+                req.shot,
+                n_steps=req.n_steps,
+                seed=req.seed,
+                data_root=root,
+                ensure_data=req.ensure_data,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return frame_to_dict(frame)
+
+    @api.post("/api/sim/seek")
+    def sim_seek(req: SeekRequest) -> dict[str, Any]:
+        try:
+            return frame_to_dict(_sim.seek(req.index))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @api.post("/api/sim/detach-shot")
+    def sim_detach_shot() -> dict[str, Any]:
+        return frame_to_dict(_sim.detach_shot())
+
+    @api.get("/api/sim/scrub")
+    def sim_scrub_state() -> dict[str, Any]:
+        return _sim.scrub_state()
 
     @api.post("/api/sim/fusion-run")
     def sim_fusion_run(req: FusionRunRequest) -> dict[str, Any]:

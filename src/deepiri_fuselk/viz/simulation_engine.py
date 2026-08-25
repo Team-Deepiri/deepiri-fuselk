@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -14,6 +16,9 @@ from deepiri_fuselk.models.disruption_detector import DisruptionAssessment
 from deepiri_fuselk.models.elm_predictor import ELMPrediction
 from deepiri_fuselk.sim.fusion_cell import FusionCell, FusionCellReport
 from deepiri_fuselk.sim.reactor_cell import ReactorStep
+
+if TYPE_CHECKING:
+    from deepiri_fuselk.sim.shot_replay import ShotReplayResult
 
 _REGISTRY = DeviceRegistry()
 
@@ -79,6 +84,14 @@ class SimulationFrame:
     target_beta_n: float = 0.0
     target_li: float = 0.0
     target_d_alpha: float = 0.0
+    # Shot-scrub identity (shared clock with Shot Workbench / ODL labels).
+    mode: str = "live"  # "live" | "scrub"
+    shot_id: str | None = None
+    scrub_index: int | None = None
+    scrub_n: int | None = None
+    time_s: float | None = None
+    odl_label: int | None = None
+    density: float | None = None
 
 
 @dataclass
@@ -111,7 +124,12 @@ _MU0 = 4.0e-7 * np.pi  # vacuum permeability, T*m/A
 
 
 class LiveSimulation:
-    """Step FusionCell/ReactorCell for real-time dashboard updates."""
+    """Step FusionCell/ReactorCell for real-time dashboard updates.
+
+    When a shot is attached, ``step`` / ``seek`` scrub the archived discharge
+    through the same HELIX → disruption → Venturi stack as Shot Workbench —
+    so the port view, gauges, and ODL labels share one clock.
+    """
 
     def __init__(
         self,
@@ -125,6 +143,12 @@ class LiveSimulation:
         self._last: SimulationFrame | None = None
         self.device: DeviceProfile = get_device(device)
         self.preset = preset if preset in _PRESET_TARGETS else "H-mode"
+        self._scrub_result: ShotReplayResult | None = None
+        self._scrub_index = 0
+
+    @property
+    def scrub_active(self) -> bool:
+        return self._scrub_result is not None and len(self._scrub_result.frames) > 0
 
     def set_device(self, name: str) -> None:
         """Switch the active device profile (drives gauge limits/equilibrium shape)."""
@@ -135,21 +159,115 @@ class LiveSimulation:
         if name in _PRESET_TARGETS:
             self.preset = name
 
+    def attach_shot(
+        self,
+        shot: str | Path,
+        *,
+        n_steps: int = 24,
+        seed: int = 42,
+        data_root: Path | None = None,
+        ensure_data: bool = False,
+    ) -> SimulationFrame:
+        """Precompute a ShotReplayer scrub and seek to the first frame."""
+        from deepiri_fuselk.sim.shot_replay import ShotReplayer
+        from deepiri_fuselk.sim.shot_workbench import resolve_shot_path
+
+        path = resolve_shot_path(shot, data_root=data_root, ensure_data=ensure_data)
+        result = ShotReplayer(grid_size=self.grid_size).scrub(path=path, n_steps=n_steps, seed=seed)
+        self._scrub_result = result
+        self._scrub_index = 0
+        # Prefer registered device matching the archive; fall back to current.
+        if result.device and result.device in _REGISTRY.list_devices():
+            self.device = get_device(result.device)
+        self.state = SimulationState(seed=seed)
+        return self.seek(0)
+
+    def detach_shot(self) -> SimulationFrame:
+        """Leave scrub mode and resume synthetic live stepping."""
+        self.clear_scrub()
+        return self.reset(seed=self.state.seed)
+
+    def clear_scrub(self) -> None:
+        """Drop attached scrub without stepping (used by API reset)."""
+        self._scrub_result = None
+        self._scrub_index = 0
+
+    def seek(self, index: int) -> SimulationFrame:
+        """Jump to a scrub index (requires an attached shot)."""
+        if not self.scrub_active:
+            raise RuntimeError("no shot attached — call attach_shot first")
+        assert self._scrub_result is not None
+        n = len(self._scrub_result.frames)
+        self._scrub_index = int(np.clip(index, 0, n - 1))
+        fr = self._scrub_result.frames[self._scrub_index]
+        self.state.step_count = fr.index + 1
+        self.state.elm_probs.append(fr.step.disruption.probability)
+        self.state.fusion_score = fr.step.kpis.score()
+        return self._frame_from_step(
+            fr.step,
+            seed=fr.step.seed,
+            mode="scrub",
+            shot_id=self._scrub_result.shot_id,
+            scrub_index=fr.index,
+            scrub_n=n,
+            time_s=fr.time_s,
+            odl_label=fr.odl_label,
+            density=fr.density,
+        )
+
     def reset(self, seed: int = 42) -> SimulationFrame:
+        if self.scrub_active:
+            self.state = SimulationState(seed=seed)
+            return self.seek(0)
         self.state = SimulationState(seed=seed)
         self.cell.reactor.reset(seed=seed)
         return self.step()
 
     def step(self) -> SimulationFrame:
+        if self.scrub_active:
+            assert self._scrub_result is not None
+            nxt = self._scrub_index + 1
+            if nxt >= len(self._scrub_result.frames):
+                nxt = 0  # loop the pulse for continuous port-view playback
+            return self.seek(nxt)
+
         self.state.step_count += 1
         seed = self.state.seed + self.state.step_count
         rs: ReactorStep = self.cell.step(seed=seed)
 
         self.state.elm_probs.append(rs.disruption.probability)
+        self.state.fusion_score = rs.kpis.score()
+        return self._frame_from_step(rs, seed=seed, mode="live")
+
+    def scrub_state(self) -> dict[str, Any]:
+        if not self.scrub_active or self._scrub_result is None:
+            return {"mode": "live", "shot_id": None, "index": None, "n_frames": 0}
+        return {
+            "mode": "scrub",
+            "shot_id": self._scrub_result.shot_id,
+            "device": self._scrub_result.device,
+            "index": self._scrub_index,
+            "n_frames": len(self._scrub_result.frames),
+            "odl_label_rate": self._scrub_result.odl_label_rate,
+            "mean_disruption": self._scrub_result.mean_disruption,
+        }
+
+    def _frame_from_step(
+        self,
+        rs: ReactorStep,
+        *,
+        seed: int,
+        mode: str = "live",
+        shot_id: str | None = None,
+        scrub_index: int | None = None,
+        scrub_n: int | None = None,
+        time_s: float | None = None,
+        odl_label: int | None = None,
+        density: float | None = None,
+    ) -> SimulationFrame:
         fuel = self.cell._fuel_cycle()
         muon = self.cell._muon_cycle()
         kpis = rs.kpis
-        self.state.fusion_score = kpis.score()
 
         device = self.device
         targets = _PRESET_TARGETS.get(self.preset, _PRESET_TARGETS["H-mode"])
@@ -179,8 +297,14 @@ class LiveSimulation:
         # fraction of this *physically derived* limit, so greenwald_fraction
         # is a genuine ratio rather than a scaled placeholder constant.
         n_gw_1e19 = 10.0 * max(ip_ma, 0.05) / (np.pi * a**2)
-        ne_bar_1e19 = n_gw_1e19 * targets["dens_frac"] * (0.9 + 0.2 * fusion)
-        greenwald_fraction = ne_bar_1e19 / max(n_gw_1e19, 1e-9)
+        if density is not None and density > 0:
+            # ODL archives store density in m^-3; normalize to 1e19.
+            dens = density / 1e19 if density > 1e18 else density
+            ne_bar_1e19 = dens
+            greenwald_fraction = ne_bar_1e19 / max(n_gw_1e19, 1e-9)
+        else:
+            ne_bar_1e19 = n_gw_1e19 * targets["dens_frac"] * (0.9 + 0.2 * fusion)
+            greenwald_fraction = ne_bar_1e19 / max(n_gw_1e19, 1e-9)
 
         te0_kev = 10.0 + 15.0 * fusion
         p_nbi_mw = device.max_heating_mw * 0.5 * targets["beta_n_frac"]
@@ -250,6 +374,13 @@ class LiveSimulation:
             target_beta_n=device.troyon_beta_limit * targets["beta_n_frac"],
             target_li=targets["li"],
             target_d_alpha=targets["d_alpha"],
+            mode=mode,
+            shot_id=shot_id,
+            scrub_index=scrub_index,
+            scrub_n=scrub_n,
+            time_s=time_s,
+            odl_label=odl_label,
+            density=density,
         )
         self._last = frame
         return frame
