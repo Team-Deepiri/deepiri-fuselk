@@ -67,6 +67,7 @@ class MainShell(QMainWindow):
 
     def _build_panels(self) -> None:
         tokamak_url = f"{self._api_url}/api/static/tokamak_viewer.html"
+        theatre_url = f"{self._api_url}/api/static/reactor_theatre.html"
         native: dict[str, QWidget] = {
             "sim_lab": SimLabPanel(),
             "experiments": ExperimentsPanel(),
@@ -79,6 +80,9 @@ class MainShell(QMainWindow):
                 self._dash_url, loading_message="Connecting to live Dash control room…"
             ),
             "tokamak": WebPanel(tokamak_url, loading_message="Loading 3D tokamak viewer…"),
+            "reactor_theatre": WebPanel(
+                theatre_url, loading_message="Loading reactor pulse theatre…"
+            ),
         }
         self._key_to_index: dict[str, int] = {}
 

@@ -306,6 +306,50 @@ def reactor_replay(
     console.print_json(json.dumps(data))
 
 
+@reactor_app.command("pulse")
+def reactor_pulse(
+    device: str = typer.Option("ITER", "--device", "-d"),
+    preset: str = typer.Option("H-mode", "--preset", "-p"),
+    dt: float = typer.Option(5.0, "--dt", help="Pulse clock step (s)"),
+    max_steps: int = typer.Option(200, "--max-steps"),
+    seed: int = typer.Option(42, "--seed"),
+    output: Path | None = typer.Option(None, "--output", help="Save JSON timeline"),
+) -> None:
+    """Run a full immersive reactor discharge (breakdown → flat-top → end/disrupt)."""
+    from deepiri_fuselk.sim.reactor_pulse import ReactorPulseEngine
+
+    engine = ReactorPulseEngine(device=device, preset=preset, dt_s=dt, seed=seed)
+    frames = engine.run(max_steps=max_steps)
+    table = Table(title=f"{device} {preset} pulse")
+    table.add_column("t [s]")
+    table.add_column("phase")
+    table.add_column("Ip")
+    table.add_column("Q")
+    table.add_column("P_fus")
+    table.add_column("n/nGW")
+    table.add_column("risk")
+    # Sample ~12 rows across the pulse
+    idxs = sorted({int(i * (len(frames) - 1) / 11) for i in range(12)}) if frames else []
+    for i in idxs:
+        st = frames[i]
+        table.add_row(
+            f"{st.t_s:.1f}",
+            st.phase,
+            f"{st.ip_ma:.2f}",
+            f"{st.q_factor:.2f}",
+            f"{st.p_fusion_mw:.1f}",
+            f"{st.greenwald_fraction:.2f}",
+            f"{st.disruption_risk:.2f}",
+        )
+    console.print(table)
+    final = frames[-1] if frames else None
+    if final:
+        console.print(f"[bold]{final.narrative}[/bold]")
+    if output and frames:
+        output.write_text(json.dumps([f.to_dict() for f in frames], indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+
+
 @sim_app.command("odl-benchmark")
 def sim_odl_benchmark(
     max_shots: int = typer.Option(8, "--max-shots"),
