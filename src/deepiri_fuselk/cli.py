@@ -324,6 +324,47 @@ def sim_odl_benchmark(
     console.print_json(json.dumps(data))
 
 
+@sim_app.command("solps")
+def sim_solps(
+    path: Path | None = typer.Option(None, "--path", help="Optional SOLPS HDF5 export"),
+    grid: int = typer.Option(32, "--grid"),
+    q_peak: float = typer.Option(8.0, "--q-peak", help="Synthetic peak heat [MW/m²]"),
+    export: Path | None = typer.Option(None, "--export", help="Write edge HDF5"),
+    venturi_steps: int = typer.Option(5, "--venturi-steps"),
+) -> None:
+    """Ingest SOLPS/BOUT-style edge profiles and step Venturi on divertor heat."""
+    from deepiri_fuselk.control.venturi_controller import VenturiController
+    from deepiri_fuselk.sim.solps_ingest import export_solps_hdf5
+    from deepiri_fuselk.sim.solps_wrapper import SOLPSConfig, SOLPSWrapper
+
+    wrap = SOLPSWrapper(SOLPSConfig(grid_points=grid))
+    edge = wrap.load_edge(path, q_peak_mw=q_peak, seed=42)
+    heat = wrap.divertor_heat_map(grid)
+    if export:
+        export_solps_hdf5(edge, export)
+        console.print(f"[green]Exported edge profiles → {export}[/green]")
+
+    venturi = VenturiController(engineering_limit=10.0)
+    rewards = []
+    for i in range(venturi_steps):
+        st = venturi.step(heat, elm_probability=0.2 + 0.05 * i)
+        rewards.append(st.reward)
+
+    console.print_json(
+        json.dumps(
+            {
+                "source": edge.source,
+                "peak_heat_mw_m2": edge.peak_heat(),
+                "heat_shape": list(heat.shape),
+                "ne_edge": float(edge.ne[-1]),
+                "te_edge_ev": float(edge.te[-1]),
+                "venturi_mean_reward": float(sum(rewards) / max(len(rewards), 1)),
+                "binary_linked": wrap.available(),
+            }
+        )
+    )
+
+
 @sim_app.command("fusion")
 def sim_fusion(
     steps: int = typer.Option(50, "--steps"),
