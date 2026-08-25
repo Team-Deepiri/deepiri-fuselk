@@ -10,6 +10,7 @@ import h5py
 import numpy as np
 import xarray as xr
 
+from deepiri_fuselk.data.paths import under_root
 from deepiri_fuselk.data.schemas import PlasmaShot, ProfileData
 
 
@@ -93,9 +94,11 @@ def load_imas_hdf5(path: str | Path) -> IMASShot:
 
 def export_imas_hdf5(shot: IMASShot, path: str | Path) -> Path:
     """Write shot to fuselk HDF5 archive format."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(path, "w") as f:
+    dest = Path(path)
+    parent = under_root(dest.parent)
+    dest = under_root(parent, dest.name)
+    parent.mkdir(parents=True, exist_ok=True)
+    with h5py.File(dest, "w") as f:
         f.attrs["shot_id"] = shot.shot_id
         f.attrs["device"] = shot.device
         f.create_dataset("time", data=shot.time)
@@ -111,7 +114,7 @@ def export_imas_hdf5(shot: IMASShot, path: str | Path) -> Path:
             pg.create_dataset("rho", data=np.array(prof.radius))
             pg.create_dataset("values", data=np.array(prof.values))
             pg.attrs["units"] = prof.units
-    return path
+    return dest
 
 
 def synthetic_imas_shot(shot_id: str = "SYN001", size: int = 32, seed: int = 0) -> IMASShot:

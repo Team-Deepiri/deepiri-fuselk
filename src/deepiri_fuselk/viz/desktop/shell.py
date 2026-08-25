@@ -30,6 +30,7 @@ from deepiri_fuselk.viz.desktop.panels import (
     MuonPanel,
     OilWaterPanel,
     SimLabPanel,
+    TutorialDialog,
     WebPanel,
 )
 from deepiri_fuselk.viz.desktop.styles import SHELL_QSS
@@ -66,6 +67,7 @@ class MainShell(QMainWindow):
 
     def _build_panels(self) -> None:
         tokamak_url = f"{self._api_url}/api/static/tokamak_viewer.html"
+        theatre_url = f"{self._api_url}/api/static/reactor_theatre.html"
         native: dict[str, QWidget] = {
             "sim_lab": SimLabPanel(),
             "experiments": ExperimentsPanel(),
@@ -78,6 +80,9 @@ class MainShell(QMainWindow):
                 self._dash_url, loading_message="Connecting to live Dash control room…"
             ),
             "tokamak": WebPanel(tokamak_url, loading_message="Loading 3D tokamak viewer…"),
+            "reactor_theatre": WebPanel(
+                theatre_url, loading_message="Loading reactor pulse theatre…"
+            ),
         }
         self._key_to_index: dict[str, int] = {}
 
@@ -228,6 +233,16 @@ class MainShell(QMainWindow):
             action.setShortcut(QKeySequence(f"Ctrl+{i}"))
             action.triggered.connect(lambda _c=False, k=entry.key: self._go_to(k))
             nav_menu.addAction(action)
+
+        help_menu = self.menuBar().addMenu("&Help")
+        tutorial_action = QAction("Tutorial…", self)
+        tutorial_action.setShortcut(QKeySequence("F1"))
+        tutorial_action.triggered.connect(self._show_tutorial)
+        help_menu.addAction(tutorial_action)
+
+    def _show_tutorial(self) -> None:
+        dialog = TutorialDialog(self)
+        dialog.exec()
 
     def _on_nav_changed(self, row: int) -> None:
         if row < 0:

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from deepiri_fuselk.barrier.breeding_blanket import evaluate_breeding_blanket
 from deepiri_fuselk.barrier.heat_exhaust import evaluate_brine_coating
+from deepiri_fuselk.devices.profile import DeviceProfile
+from deepiri_fuselk.devices.registry import DEFAULT
 from deepiri_fuselk.physics.pde_system import peclet_criterion
 from deepiri_fuselk.sim.fuel_cycle_context import FuelCycleContext, build_fuel_cycle_context
 from deepiri_fuselk.sim.fusion_kpis import FusionKPIs
@@ -93,15 +95,18 @@ class FusionCell:
         brine_salinity_ppt: float = 35.0,
         fuel_cycle: FuelCycleContext | None = None,
         audit_vision_on_init: bool = False,
+        device: DeviceProfile = DEFAULT,
     ) -> None:
         self.grid_size = grid_size
         self.brine_salinity = brine_salinity_ppt
+        self.device = device
         self._fuel_cycle_ctx = fuel_cycle or build_fuel_cycle_context(grid_size)
         self.reactor = ReactorCell(
             grid_size=grid_size,
             policy_path=policy_path,
             train_elm=train_elm,
             fuel_cycle=self._fuel_cycle_ctx,
+            device=device,
         )
         self._vision_cache: VisionAlignmentReport | None = None
         if audit_vision_on_init:

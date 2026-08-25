@@ -39,6 +39,16 @@ NAV_ENTRIES: list[NavEntry] = [
         is_web=True,
     ),
     NavEntry(
+        "reactor_theatre",
+        "Reactor Theatre",
+        "⚛",
+        "Reactor Pulse Theatre",
+        "Immersive discharge — breakdown through flat-top on a real pulse clock",
+        "Visualization",
+        "Ctrl+Shift+2",
+        is_web=True,
+    ),
+    NavEntry(
         "sim_lab",
         "Simulation Lab",
         "⏵",

@@ -31,6 +31,10 @@ app.add_typer(reactor_app, name="reactor")
 experiments_app = typer.Typer(help="Run catalog experiments")
 app.add_typer(experiments_app, name="experiments")
 app.add_typer(viz_app, name="viz")
+workbench_app = typer.Typer(help="Shot Workbench — scrub + counterfactual pulse analysis")
+app.add_typer(workbench_app, name="workbench")
+report_app = typer.Typer(help="Auto-generated performance reports (PDF / Markdown / JSON)")
+app.add_typer(report_app, name="report")
 
 
 @app.command()
@@ -52,6 +56,7 @@ def doctor(
         "pyarrow",
         "gymnasium",
         "stable_baselines3",
+        "fpdf",
     ]
     table = Table(title="fuselk doctor")
     table.add_column("Module")
@@ -284,6 +289,131 @@ def reactor_score(
     console.print_json(json.dumps(run.to_report()))
 
 
+@reactor_app.command("replay")
+def reactor_replay(
+    path: Path = typer.Argument(..., help="IMAS HDF5 shot path (CMOD_*.h5 or SYN*.h5)"),
+    steps: int = typer.Option(20, "--steps"),
+    output: Path | None = typer.Option(None, "--output", help="Save JSON report"),
+) -> None:
+    """Scrub a fetched IMAS shot through HELIX → disruption → Venturi."""
+    from deepiri_fuselk.sim.shot_replay import ShotReplayer
+
+    result = ShotReplayer().scrub(path=path, n_steps=steps)
+    data = result.to_report()
+    if output:
+        output.write_text(json.dumps(data, indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+    console.print_json(json.dumps(data))
+
+
+@reactor_app.command("pulse")
+def reactor_pulse(
+    device: str = typer.Option("ITER", "--device", "-d"),
+    preset: str = typer.Option("H-mode", "--preset", "-p"),
+    dt: float = typer.Option(5.0, "--dt", help="Pulse clock step (s)"),
+    max_steps: int = typer.Option(200, "--max-steps"),
+    seed: int = typer.Option(42, "--seed"),
+    output: Path | None = typer.Option(None, "--output", help="Save JSON timeline"),
+) -> None:
+    """Run a full immersive reactor discharge (breakdown → flat-top → end/disrupt)."""
+    from deepiri_fuselk.sim.reactor_pulse import ReactorPulseEngine
+
+    engine = ReactorPulseEngine(device=device, preset=preset, dt_s=dt, seed=seed)
+    frames = engine.run(max_steps=max_steps)
+    table = Table(title=f"{device} {preset} pulse")
+    table.add_column("t [s]")
+    table.add_column("phase")
+    table.add_column("Ip")
+    table.add_column("Q")
+    table.add_column("P_fus")
+    table.add_column("n/nGW")
+    table.add_column("risk")
+    # Sample ~12 rows across the pulse
+    idxs = sorted({int(i * (len(frames) - 1) / 11) for i in range(12)}) if frames else []
+    for i in idxs:
+        st = frames[i]
+        table.add_row(
+            f"{st.t_s:.1f}",
+            st.phase,
+            f"{st.ip_ma:.2f}",
+            f"{st.q_factor:.2f}",
+            f"{st.p_fusion_mw:.1f}",
+            f"{st.greenwald_fraction:.2f}",
+            f"{st.disruption_risk:.2f}",
+        )
+    console.print(table)
+    final = frames[-1] if frames else None
+    if final:
+        console.print(f"[bold]{final.narrative}[/bold]")
+    if output and frames:
+        output.write_text(json.dumps([f.to_dict() for f in frames], indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+
+
+@sim_app.command("odl-benchmark")
+def sim_odl_benchmark(
+    max_shots: int = typer.Option(8, "--max-shots"),
+    steps: int = typer.Option(10, "--steps"),
+    root: Path = typer.Option(Path(".fuselk-data"), "--root"),
+    output: Path | None = typer.Option(None, "--output"),
+) -> None:
+    """Public C-Mod ODL benchmark: P_dis vs density-limit labels."""
+    from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+    report = run_odl_benchmark(root, max_shots=max_shots, steps_per_shot=steps)
+    data = report.to_dict()
+    if output:
+        output.write_text(json.dumps(data, indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+    console.print(
+        f"[bold]ODL shots={report.n_shots}[/bold]  "
+        f"mean_auc_proxy={report.mean_auc_proxy:.3f}  "
+        f"corr(label,P_dis)={report.correlation_label_pdis:.3f}"
+    )
+    console.print_json(json.dumps(data))
+
+
+@sim_app.command("solps")
+def sim_solps(
+    path: Path | None = typer.Option(None, "--path", help="Optional SOLPS HDF5 export"),
+    grid: int = typer.Option(32, "--grid"),
+    q_peak: float = typer.Option(8.0, "--q-peak", help="Synthetic peak heat [MW/m²]"),
+    export: Path | None = typer.Option(None, "--export", help="Write edge HDF5"),
+    venturi_steps: int = typer.Option(5, "--venturi-steps"),
+) -> None:
+    """Ingest SOLPS/BOUT-style edge profiles and step Venturi on divertor heat."""
+    from deepiri_fuselk.control.venturi_controller import VenturiController
+    from deepiri_fuselk.sim.solps_ingest import export_solps_hdf5
+    from deepiri_fuselk.sim.solps_wrapper import SOLPSConfig, SOLPSWrapper
+
+    wrap = SOLPSWrapper(SOLPSConfig(grid_points=grid))
+    edge = wrap.load_edge(path, q_peak_mw=q_peak, seed=42)
+    heat = wrap.divertor_heat_map(grid)
+    if export:
+        export_solps_hdf5(edge, export)
+        console.print(f"[green]Exported edge profiles → {export}[/green]")
+
+    venturi = VenturiController(engineering_limit=10.0)
+    rewards = []
+    for i in range(venturi_steps):
+        st = venturi.step(heat, elm_probability=0.2 + 0.05 * i)
+        rewards.append(st.reward)
+
+    console.print_json(
+        json.dumps(
+            {
+                "source": edge.source,
+                "peak_heat_mw_m2": edge.peak_heat(),
+                "heat_shape": list(heat.shape),
+                "ne_edge": float(edge.ne[-1]),
+                "te_edge_ev": float(edge.te[-1]),
+                "venturi_mean_reward": float(sum(rewards) / max(len(rewards), 1)),
+                "binary_linked": wrap.available(),
+            }
+        )
+    )
+
+
 @sim_app.command("fusion")
 def sim_fusion(
     steps: int = typer.Option(50, "--steps"),
@@ -334,6 +464,181 @@ def viz_serve(host: str = "127.0.0.1", port: int = 8050) -> None:
     from deepiri_fuselk.viz.dashboard.app import create_app
 
     create_app().run_server(host=host, port=port, debug=False)
+
+
+@workbench_app.command("analyze")
+def workbench_analyze(
+    shot: str = typer.Option(
+        "1140226012", "--shot", "-s", help="ODL/synthetic shot id or HDF5 path"
+    ),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    steps: int = typer.Option(24, "--steps", "-n"),
+    export_dir: Path | None = typer.Option(
+        None, "--export", help="Write JSON + Markdown + performance PDF"
+    ),
+    fetch: bool = typer.Option(False, "--fetch", help="Fetch public data if missing"),
+) -> None:
+    """Scrub one pulse: HELIX + disruption + Venturi open/closed counterfactual."""
+    from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+    wb = ShotWorkbench(data_root=data_root)
+    report = wb.analyze(shot, n_steps=steps, ensure_data=fetch)
+    if export_dir is not None:
+        paths = wb.export(report, export_dir)
+        console.print(f"[green]Wrote {paths['json']}[/green]")
+        console.print(f"[green]Wrote {paths['markdown']}[/green]")
+        if "pdf" in paths:
+            console.print(f"[green]Wrote {paths['pdf']}[/green]")
+    console.print(report.to_markdown())
+
+
+@workbench_app.command("batch")
+def workbench_batch(
+    limit: int = typer.Option(5, "--limit", "-n"),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    steps: int = typer.Option(16, "--steps"),
+    export_dir: Path | None = typer.Option(None, "--export"),
+    fetch: bool = typer.Option(True, "--fetch/--no-fetch"),
+) -> None:
+    """Batch-analyze ODL shots and summarize counterfactual deltas."""
+    from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+    wb = ShotWorkbench(data_root=data_root)
+    reports = wb.analyze_batch(
+        data_root=data_root, max_shots=limit, n_steps=steps, ensure_data=fetch
+    )
+    table = Table(title="Shot Workbench batch")
+    table.add_column("Shot")
+    table.add_column("P_rad MW")
+    table.add_column("Δ P_dis")
+    table.add_column("Δ uniformity")
+    table.add_column("Lead time s")
+    for r in reports:
+        cf = r.counterfactual
+        lead = f"{cf.lead_time_s:.3f}" if cf.lead_time_s is not None else "—"
+        table.add_row(
+            r.shot_id,
+            f"{r.radiance_p_rad_mw:.3f}",
+            f"{cf.delta_p_dis:+.3f}",
+            f"{cf.delta_uniformity:+.3f}",
+            lead,
+        )
+        if export_dir is not None:
+            wb.export(r, export_dir / r.shot_id)
+    console.print(table)
+
+
+@report_app.command("pdf")
+def report_pdf(
+    kind: str = typer.Argument(
+        "workbench",
+        help="Report kind: workbench | odl | fusion",
+    ),
+    shot: str = typer.Option("1140226012", "--shot", "-s"),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    output: Path = typer.Option(Path("exports/performance_report.pdf"), "--output", "-o"),
+    steps: int = typer.Option(16, "--steps", "-n"),
+    fetch: bool = typer.Option(False, "--fetch"),
+    max_shots: int = typer.Option(8, "--max-shots"),
+) -> None:
+    """Auto-generate a branded performance PDF (Workbench / ODL / FusionCell)."""
+    from deepiri_fuselk import __version__
+    from deepiri_fuselk.reports import (
+        from_fusion_cell,
+        from_odl_benchmark,
+        from_workbench,
+        render_performance_pdf,
+    )
+
+    kind = kind.lower().strip()
+    if kind == "workbench":
+        from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+        wb = ShotWorkbench(data_root=data_root)
+        perf = from_workbench(
+            wb.analyze(shot, n_steps=steps, ensure_data=fetch),
+            version=__version__,
+        )
+    elif kind == "odl":
+        from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+        perf = from_odl_benchmark(
+            run_odl_benchmark(
+                data_root, max_shots=max_shots, steps_per_shot=steps, ensure_data=fetch
+            ),
+            version=__version__,
+        )
+    elif kind == "fusion":
+        from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+        _, cell_report = FusionCell(grid_size=16, train_elm=False).run(n_steps=steps, seed=42)
+        perf = from_fusion_cell(cell_report, version=__version__, steps=steps)
+    else:
+        console.print(f"[red]Unknown kind '{kind}'. Use workbench, odl, or fusion.[/red]")
+        raise typer.Exit(code=1)
+
+    path = render_performance_pdf(perf, output)
+    md = output.with_suffix(".md")
+    md.write_text(perf.to_markdown())
+    console.print(f"[green]PDF:[/green] {path}")
+    console.print(f"[green]Markdown:[/green] {md}")
+
+
+@report_app.command("dossier")
+def report_dossier(
+    kind: str = typer.Argument(
+        "workbench",
+        help="Report kind: workbench | odl | fusion",
+    ),
+    shot: str = typer.Option("1140226012", "--shot", "-s"),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    out_dir: Path = typer.Option(Path("exports"), "--out-dir", "-o"),
+    stem: str | None = typer.Option(None, "--stem", help="Filename stem (default from kind/shot)"),
+    steps: int = typer.Option(16, "--steps", "-n"),
+    fetch: bool = typer.Option(False, "--fetch"),
+    max_shots: int = typer.Option(8, "--max-shots"),
+) -> None:
+    """Export a complete physicist pack: JSON + Markdown + branded PDF."""
+    from deepiri_fuselk import __version__
+    from deepiri_fuselk.reports import (
+        export_dossier,
+        from_fusion_cell,
+        from_odl_benchmark,
+        from_workbench,
+    )
+
+    kind = kind.lower().strip()
+    if kind == "workbench":
+        from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+        wb = ShotWorkbench(data_root=data_root)
+        wb_report = wb.analyze(shot, n_steps=steps, ensure_data=fetch)
+        perf = from_workbench(wb_report, version=__version__)
+        name = stem or f"workbench_{wb_report.shot_id}"
+    elif kind == "odl":
+        from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+        perf = from_odl_benchmark(
+            run_odl_benchmark(
+                data_root, max_shots=max_shots, steps_per_shot=steps, ensure_data=fetch
+            ),
+            version=__version__,
+        )
+        name = stem or "odl_benchmark"
+    elif kind == "fusion":
+        from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+        _, cell_report = FusionCell(grid_size=16, train_elm=False).run(n_steps=steps, seed=42)
+        perf = from_fusion_cell(cell_report, version=__version__, steps=steps)
+        name = stem or "fusion_cell"
+    else:
+        console.print(f"[red]Unknown kind '{kind}'. Use workbench, odl, or fusion.[/red]")
+        raise typer.Exit(code=1)
+
+    paths = export_dossier(perf, out_dir, stem=name)
+    console.print(f"[bold]Performance dossier[/bold] → {out_dir.resolve()}")
+    for label, path in paths.items():
+        console.print(f"  [green]{label}:[/green] {path}")
 
 
 @app.command("gui")

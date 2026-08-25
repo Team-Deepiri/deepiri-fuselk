@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from deepiri_fuselk.devices.profile import DeviceProfile
+from deepiri_fuselk.devices.registry import DEFAULT
 from deepiri_fuselk.focal.focal_heatmap import focal_heatmap, from_hqrm, singularity_gradient
 from deepiri_fuselk.focal.lockin_amplifier import subtract_incoherent_noise
 from deepiri_fuselk.focal.spiral_attention import apply_spiral_attention
@@ -54,11 +56,13 @@ class HelixEngine:
         rotation_hz: float = 5000.0,
         shear_threshold: float = 0.3,
         variance_threshold: float = 0.07,
+        device: DeviceProfile = DEFAULT,
     ) -> None:
         self.tracker = PhaseLockedTracker(omega_init=rotation_hz)
         self.rotation_hz = rotation_hz
         self.shear_threshold = shear_threshold
         self.variance_threshold = variance_threshold
+        self.device = device
         self._snr_history: list[float] = []
         self._pitch_cache = _PitchCache()
 
@@ -69,7 +73,9 @@ class HelixEngine:
         oy = float(np.sin(self.tracker.state.theta) * 0.3)
         if self._pitch_cache.size == n and self._pitch_cache.o_point == (ox, oy):
             return self._pitch_cache.pitch
-        pitch = float(field_line_pitch(np.array([ox]), np.array([oy]))[0])
+        pitch = float(
+            field_line_pitch(np.array([ox]), np.array([oy]), a=self.device.minor_radius_m)[0]
+        )
         self._pitch_cache = _PitchCache(size=n, o_point=(ox, oy), pitch=pitch)
         return pitch
 
