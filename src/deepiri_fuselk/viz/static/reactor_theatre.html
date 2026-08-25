@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fuselk Reactor Theatre</title>
+  <style>
+    :root {
+      --bg0: #06080f;
+      --bg1: #10182a;
+      --ink: #e8ecf4;
+      --muted: #7a8aaa;
+      --accent: #4488ff;
+      --warn: #ff8844;
+      --hot: #ff3344;
+      --ok: #44cc88;
+      --panel: rgba(12, 16, 28, 0.88);
+      --line: #2a3348;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(ellipse at 50% 20%, #1a2744 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 80%, #2a1520 0%, transparent 40%),
+        linear-gradient(160deg, var(--bg1), var(--bg0));
+      overflow: hidden;
+    }
+    #stage {
+      position: absolute; inset: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      padding: 18px;
+      gap: 14px;
+    }
+    header {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      gap: 16px; flex-wrap: wrap;
+    }
+    header h1 {
+      margin: 0; font-size: clamp(1.2rem, 2vw, 1.8rem); letter-spacing: 0.02em;
+    }
+    header .sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+    .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    select, button {
+      background: #121826; color: var(--ink); border: 1px solid var(--line);
+      border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: transparent; font-weight: 600; }
+    button.danger { background: #5a1a22; border-color: #aa3344; }
+    #board {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px; min-height: 0;
+    }
+    @media (max-width: 900px) { #board { grid-template-columns: 1fr; } }
+    .panel {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+      padding: 16px 18px; backdrop-filter: blur(10px); min-height: 0;
+    }
+    .phase {
+      font-size: clamp(1.6rem, 3vw, 2.4rem); font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .phase.disrupted { color: var(--hot); animation: pulse 0.8s ease infinite; }
+    .phase.flat_top { color: var(--ok); }
+    .phase.ramp_up, .phase.ramp_down { color: var(--warn); }
+    @keyframes pulse { 50% { opacity: 0.55; } }
+    .narrative { margin-top: 8px; color: var(--muted); font-size: 0.92rem; line-height: 1.45; }
+    .timeline {
+      margin-top: 18px; height: 10px; background: #0a0e18; border-radius: 999px; overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    .timeline > span {
+      display: block; height: 100%; width: 0%;
+      background: linear-gradient(90deg, var(--accent), #88aaff);
+      transition: width 200ms linear;
+    }
+    .gauges {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px;
+    }
+    .gauge {
+      background: #0c111c; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    }
+    .gauge .lbl { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+    .gauge .val { font-size: 1.15rem; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+    #reactor-viz {
+      position: relative; height: 100%; min-height: 280px;
+      display: grid; place-items: center;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(255,100,40,0.35) 0%, transparent 28%),
+        radial-gradient(circle at 50% 50%, rgba(68,136,255,0.18) 0%, transparent 55%),
+        #080b14;
+      border-radius: 12px; border: 1px solid var(--line); overflow: hidden;
+    }
+    #core {
+      width: min(42vw, 260px); height: min(28vw, 170px);
+      border: 3px solid rgba(255,255,255,0.25);
+      border-radius: 50%;
+      box-shadow:
+        0 0 40px rgba(255,102,34,0.55),
+        inset 0 0 40px rgba(255,80,20,0.35);
+      background: radial-gradient(circle at 40% 35%, #ffaa66, #ff4422 45%, #441008 80%);
+      transition: transform 300ms ease, filter 300ms ease, opacity 300ms ease;
+    }
+    #core.disrupted {
+      filter: saturate(2) brightness(1.4); transform: scale(1.08);
+      box-shadow: 0 0 80px rgba(255,40,20,0.9);
+    }
+    #core.ended { opacity: 0.25; filter: grayscale(0.8); }
+    footer {
+      display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+      color: var(--muted); font-size: 0.78rem;
+    }
+    #status { font-family: ui-monospace, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <header>
+      <div>
+        <h1>deepiri-fuselk · Reactor Theatre</h1>
+        <div class="sub">Immersive discharge — device-faithful power balance on a real pulse clock</div>
+      </div>
+      <div class="controls">
+        <select id="device">
+          <option>ITER</option>
+          <option>JET</option>
+          <option>DIII-D</option>
+        </select>
+        <select id="preset">
+          <option>H-mode</option>
+          <option>L-mode</option>
+          <option>Density Limit</option>
+        </select>
+        <button class="primary" id="btn-start" type="button">Start pulse</button>
+        <button id="btn-step" type="button">Step</button>
+        <button class="danger" id="btn-stop" type="button">Stop</button>
+      </div>
+    </header>
+    <div id="board">
+      <section class="panel">
+        <div id="phase" class="phase">—</div>
+        <div id="narrative" class="narrative">Waiting for pulse…</div>
+        <div class="timeline"><span id="progress"></span></div>
+        <div class="gauges">
+          <div class="gauge"><div class="lbl">Ip</div><div class="val" id="g-ip">—</div></div>
+          <div class="gauge"><div class="lbl">Q</div><div class="val" id="g-q">—</div></div>
+          <div class="gauge"><div class="lbl">P_fusion</div><div class="val" id="g-pf">—</div></div>
+          <div class="gauge"><div class="lbl">n / n_GW</div><div class="val" id="g-gw">—</div></div>
+          <div class="gauge"><div class="lbl">Divertor peak</div><div class="val" id="g-div">—</div></div>
+          <div class="gauge"><div class="lbl">Disruption</div><div class="val" id="g-dis">—</div></div>
+          <div class="gauge"><div class="lbl">Te0</div><div class="val" id="g-te">—</div></div>
+          <div class="gauge"><div class="lbl">W_th</div><div class="val" id="g-w">—</div></div>
+          <div class="gauge"><div class="lbl">Neutrons</div><div class="val" id="g-n">—</div></div>
+        </div>
+      </section>
+      <section class="panel" style="display:flex;flex-direction:column;">
+        <div style="color:var(--muted);font-size:0.75rem;margin-bottom:8px;">VESSEL CROSS-SECTION · LIVE GLOW</div>
+        <div id="reactor-viz"><div id="core"></div></div>
+      </section>
+    </div>
+    <footer>
+      <div id="status">bridge: idle</div>
+      <div>POST /api/sim/pulse/start · step advances the discharge clock</div>
+    </footer>
+  </div>
+  <script>
+    const api = () => new URL(window.location.href).origin;
+    let playing = false;
+    let timer = null;
+
+    async function post(path, body) {
+      const r = await fetch(api() + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+    async function get(path) {
+      const r = await fetch(api() + path);
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    }
+
+    function paint(f) {
+      const phase = f.pulse_phase || f.mode || 'live';
+      const el = document.getElementById('phase');
+      el.textContent = phase.replace('_', ' ');
+      el.className = 'phase ' + phase;
+      document.getElementById('narrative').textContent = f.pulse_narrative || f.action || '—';
+      const prog = typeof f.pulse_progress === 'number' ? f.pulse_progress : 0;
+      document.getElementById('progress').style.width = (prog * 100).toFixed(1) + '%';
+      const set = (id, text) => { document.getElementById(id).textContent = text; };
+      set('g-ip', (f.ip_ma ?? 0).toFixed(2) + ' MA');
+      set('g-q', (f.q_factor ?? f.q_plasma ?? 0).toFixed(2));
+      set('g-pf', (f.p_fusion_mw ?? 0).toFixed(1) + ' MW');
+      set('g-gw', (f.greenwald_fraction ?? 0).toFixed(2));
+      set('g-div', (f.divertor_peak_mw_m2 ?? 0).toFixed(1) + ' MW/m²');
+      set('g-dis', ((f.disruption_probability ?? 0) * 100).toFixed(0) + '%');
+      set('g-te', (f.te0_kev ?? 0).toFixed(1) + ' keV');
+      set('g-w', (f.w_th_mj ?? 0).toFixed(1) + ' MJ');
+      set('g-n', (f.neutron_rate_1e18 ?? 0).toFixed(2) + 'e18/s');
+      const core = document.getElementById('core');
+      core.classList.toggle('disrupted', phase === 'disrupted');
+      core.classList.toggle('ended', phase === 'ended');
+      const glow = Math.min(1.6, 0.4 + (f.p_fusion_mw || 0) / 200 + (f.q_factor || 0) / 20);
+      core.style.transform = `scale(${0.85 + glow * 0.2})`;
+      const t = typeof f.time_s === 'number' ? f.time_s.toFixed(1) + ' s' : '—';
+      document.getElementById('status').textContent =
+        `${f.active_device || '—'} · ${f.active_preset || '—'} · t=${t} · step ${f.step ?? '—'}`;
+    }
+
+    async function startPulse() {
+      const device = document.getElementById('device').value;
+      const preset = document.getElementById('preset').value;
+      const f = await post('/api/sim/pulse/start', { device, preset, dt_s: 2.0, seed: 42 });
+      paint(f);
+      playing = true;
+      if (timer) clearInterval(timer);
+      timer = setInterval(async () => {
+        if (!playing) return;
+        try {
+          const frame = await post('/api/sim/step', {});
+          paint(frame);
+          if (frame.pulse_phase === 'ended' || frame.pulse_phase === 'disrupted') {
+            playing = false;
+          }
+        } catch (e) {
+          document.getElementById('status').textContent = 'step failed: ' + e;
+        }
+      }, 450);
+    }
+
+    document.getElementById('btn-start').onclick = () => startPulse().catch(e => {
+      document.getElementById('status').textContent = String(e);
+    });
+    document.getElementById('btn-step').onclick = () => post('/api/sim/step', {}).then(paint);
+    document.getElementById('btn-stop').onclick = () => {
+      playing = false;
+      post('/api/sim/pulse/stop', {}).then(paint);
+    };
+
+    get('/api/sim/frame').then(paint).catch(() => {
+      document.getElementById('status').textContent = 'waiting for API… open via fuselk API static route';
+    });
+  </script>
+</body>
+</html>
