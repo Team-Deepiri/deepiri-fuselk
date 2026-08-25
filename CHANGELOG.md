@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Shot-faithful replay** — `ShotPipeline` accepts IMAS heat fields; `ReactorCell.attach_shot` / `DigitalTwin.attach_shot`; `ShotReplayer` scrubber; CLI `fuselk reactor replay`
+- **ODL public benchmark** — `sim/odl_benchmark.py` + `fuselk sim odl-benchmark` scores P_dis vs C-Mod density-limit labels
+- **Port-view radiance Phase 5** — `viz/radiance.py` (bremsstrahlung, Dα Doppler, blackbody divertor RGB) with unit tests
+
 ## [0.5.2] - 2026-06-24
 
 ### Changed

@@ -52,15 +52,22 @@ class DigitalTwin:
         self._pipeline = ShotPipeline(self.helix, self.detector, self.hybrid)
         self._fuel_cycle: FuelCycleContext = build_fuel_cycle_context(grid_size)
         self.imas_shot: IMASShot = synthetic_imas_shot(size=grid_size)
+        self.use_imas_heat: bool = False
         self._step = 0
         self._heat = np.zeros((grid_size, grid_size))
         self._helix_result: HelixResult | None = None
         self._venturi_state: VenturiState | None = None
         self.history = TwinHistory()
 
+    def attach_shot(self, shot: IMASShot, *, use_heat: bool = True) -> None:
+        self.imas_shot = shot
+        self.use_imas_heat = use_heat
+        self.grid_size = int(shot.heat_field.shape[0])
+
     def reset(self, seed: int = 42) -> TwinState:
         self._step = 0
-        self.imas_shot = synthetic_imas_shot(size=self.grid_size, seed=seed)
+        if not self.use_imas_heat:
+            self.imas_shot = synthetic_imas_shot(size=self.grid_size, seed=seed)
         self.history = TwinHistory()
         self.hybrid.venturi.reset()
         result = self._pipeline.process(
@@ -68,6 +75,7 @@ class DigitalTwin:
             seed=seed,
             q_profile_values=np.array(self.imas_shot.q_profile.values, dtype=np.float64),
             te_profile_values=np.array(self.imas_shot.Te_profile.values, dtype=np.float64),
+            imas=self.imas_shot if self.use_imas_heat else None,
         )
         self._helix_result = result.helix
         self._venturi_state = result.control.venturi
@@ -82,6 +90,7 @@ class DigitalTwin:
             seed=42 + self._step,
             q_profile_values=np.array(self.imas_shot.q_profile.values, dtype=np.float64),
             te_profile_values=np.array(self.imas_shot.Te_profile.values, dtype=np.float64),
+            imas=self.imas_shot if self.use_imas_heat else None,
         )
         self._helix_result = result.helix
         self._venturi_state = result.control.venturi

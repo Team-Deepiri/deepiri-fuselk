@@ -284,6 +284,46 @@ def reactor_score(
     console.print_json(json.dumps(run.to_report()))
 
 
+@reactor_app.command("replay")
+def reactor_replay(
+    path: Path = typer.Argument(..., help="IMAS HDF5 shot path (CMOD_*.h5 or SYN*.h5)"),
+    steps: int = typer.Option(20, "--steps"),
+    output: Path | None = typer.Option(None, "--output", help="Save JSON report"),
+) -> None:
+    """Scrub a fetched IMAS shot through HELIX → disruption → Venturi."""
+    from deepiri_fuselk.sim.shot_replay import ShotReplayer
+
+    result = ShotReplayer().scrub(path=path, n_steps=steps)
+    data = result.to_report()
+    if output:
+        output.write_text(json.dumps(data, indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+    console.print_json(json.dumps(data))
+
+
+@sim_app.command("odl-benchmark")
+def sim_odl_benchmark(
+    max_shots: int = typer.Option(8, "--max-shots"),
+    steps: int = typer.Option(10, "--steps"),
+    root: Path = typer.Option(Path(".fuselk-data"), "--root"),
+    output: Path | None = typer.Option(None, "--output"),
+) -> None:
+    """Public C-Mod ODL benchmark: P_dis vs density-limit labels."""
+    from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+    report = run_odl_benchmark(root, max_shots=max_shots, steps_per_shot=steps)
+    data = report.to_dict()
+    if output:
+        output.write_text(json.dumps(data, indent=2))
+        console.print(f"[green]Saved {output}[/green]")
+    console.print(
+        f"[bold]ODL shots={report.n_shots}[/bold]  "
+        f"mean_auc_proxy={report.mean_auc_proxy:.3f}  "
+        f"corr(label,P_dis)={report.correlation_label_pdis:.3f}"
+    )
+    console.print_json(json.dumps(data))
+
+
 @sim_app.command("fusion")
 def sim_fusion(
     steps: int = typer.Option(50, "--steps"),
