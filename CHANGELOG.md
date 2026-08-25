@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Live shot scrub** — attach ODL/synthetic archives to `LiveSimulation`; `seek` / loop through ShotReplayer frames so port view + gauges share Workbench ODL clock; API `attach-shot` / `seek` / `detach-shot` / `scrub`; tokamak viewer scrub slider + density-limit flag
 - **Shot Workbench** — scrubbable ODL/synthetic pulse desk (`sim/shot_workbench.py`): HELIX + disruption + Venturi open/closed counterfactual + conserved P_rad + filament; CLI `fuselk workbench analyze|batch`; API `POST /api/workbench/analyze`; JSON/Markdown export
 - **Shot-faithful replay** — `ShotPipeline` accepts IMAS heat fields; `ReactorCell.attach_shot` / `DigitalTwin.attach_shot`; `ShotReplayer` scrubber; CLI `fuselk reactor replay`
 - **ODL public benchmark** — `sim/odl_benchmark.py` + `fuselk sim odl-benchmark` scores P_dis vs C-Mod density-limit labels
