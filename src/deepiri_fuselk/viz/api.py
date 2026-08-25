@@ -27,7 +27,7 @@ from deepiri_fuselk.viz.simulation_engine import (
 _STATIC = Path(__file__).resolve().parent / "static"
 _STATIC_ROOT = _STATIC.resolve()
 _ALLOWED_STATIC: dict[str, Path] = {}
-for _rel in ("tokamak_viewer.html", "branding/deepiri_favicon.svg"):
+for _rel in ("tokamak_viewer.html", "reactor_theatre.html", "branding/deepiri_favicon.svg"):
     _candidate = (_STATIC / _rel).resolve()
     if _candidate.is_relative_to(_STATIC_ROOT):
         _ALLOWED_STATIC[_rel] = _candidate
@@ -87,6 +87,15 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         "time_s": frame.time_s,
         "odl_label": frame.odl_label,
         "density": frame.density,
+        "pulse_phase": frame.pulse_phase,
+        "pulse_progress": frame.pulse_progress,
+        "pulse_duration_s": frame.pulse_duration_s,
+        "p_fusion_mw": frame.p_fusion_mw,
+        "p_alpha_mw": frame.p_alpha_mw,
+        "q_factor": frame.q_factor,
+        "divertor_peak_mw_m2": frame.divertor_peak_mw_m2,
+        "pulse_narrative": frame.pulse_narrative,
+        "pulse_alive": frame.pulse_alive,
         "helix": {
             "o_point": list(frame.helix.o_point),
             "phase_locked_snr": frame.helix.phase_locked_snr,
@@ -158,6 +167,13 @@ class PerformancePdfRequest(BaseModel):
     data_root: str | None = None
     ensure_data: bool = False
     max_shots: int = Field(default=8, ge=1, le=40)
+
+
+class PulseStartRequest(BaseModel):
+    device: str = "ITER"
+    preset: str = "H-mode"
+    dt_s: float = Field(default=2.0, ge=0.1, le=20.0)
+    seed: int = 42
 
 
 def create_api() -> FastAPI:
@@ -274,6 +290,14 @@ def create_api() -> FastAPI:
     @api.get("/api/sim/scrub")
     def sim_scrub_state() -> dict[str, Any]:
         return _sim.scrub_state()
+
+    @api.post("/api/sim/pulse/start")
+    def sim_pulse_start(req: PulseStartRequest) -> dict[str, Any]:
+        return frame_to_dict(_sim.start_pulse(req.device, req.preset, dt_s=req.dt_s, seed=req.seed))
+
+    @api.post("/api/sim/pulse/stop")
+    def sim_pulse_stop() -> dict[str, Any]:
+        return frame_to_dict(_sim.stop_pulse())
 
     @api.post("/api/sim/fusion-run")
     def sim_fusion_run(req: FusionRunRequest) -> dict[str, Any]:
