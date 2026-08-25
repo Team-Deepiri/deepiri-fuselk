@@ -1,10 +1,13 @@
-"""SOLPS-ITER / BOUT++ wrapper stubs for high-fidelity coupling."""
+"""SOLPS-ITER / BOUT++ edge coupling — ingest + optional live binary stub."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
+
+from deepiri_fuselk.sim.solps_ingest import EdgeProfiles, SOLPSIngest, synthetic_solps_edge
 
 
 @dataclass
@@ -22,20 +25,52 @@ class SOLPSResult:
 
 
 class SOLPSWrapper:
-    """Stub wrapper for SOLPS-ITER edge plasma code."""
+    """
+    Edge-plasma coupling entry point.
+
+    When a SOLPS binary is not linked, ``available()`` is False for the live
+    binary but ``run_step`` / ``ingest`` still produce physically shaped SOL
+    heat maps via ``SOLPSIngest`` so Venturi can train/act on edge footprints.
+    """
 
     def __init__(self, config: SOLPSConfig | None = None) -> None:
         self.config = config or SOLPSConfig()
-
-    def run_step(self, boundary_condition: np.ndarray | None = None) -> SOLPSResult:
-        n = self.config.grid_points
-        x = np.linspace(0, 1, n)
-        ne = 1e19 * np.exp(-3 * x)
-        Te = 100 * (1 - x)
-        q = self.config.diffusion_coeff * np.gradient(Te)
-        if boundary_condition is not None:
-            ne = ne * (1 + 0.1 * boundary_condition[:n])
-        return SOLPSResult(density=ne, temperature=Te, heat_flux=np.abs(q))
+        self._ingest = SOLPSIngest(self.config.grid_points)
+        self._binary_linked = False
 
     def available(self) -> bool:
-        return False  # Set True when real SOLPS binary is linked
+        return self._binary_linked
+
+    def ingest_available(self) -> bool:
+        return True
+
+    def load_edge(self, path: str | Path | None = None, **kwargs) -> EdgeProfiles:
+        return self._ingest.load(path, **kwargs)
+
+    def run_step(self, boundary_condition: np.ndarray | None = None) -> SOLPSResult:
+        if self._binary_linked:
+            # Placeholder for real SOLPS IPC — not yet wired.
+            pass
+        profiles = self._ingest.load(seed=0) if self._ingest.last is None else self._ingest.last
+        assert profiles is not None
+        if boundary_condition is not None:
+            n = min(len(profiles.ne), len(boundary_condition))
+            profiles.ne[:n] = profiles.ne[:n] * (1 + 0.1 * boundary_condition[:n])
+        return SOLPSResult(
+            density=profiles.ne,
+            temperature=profiles.te,
+            heat_flux=np.abs(profiles.heat_flux_2d.mean(axis=0)),
+        )
+
+    def divertor_heat_map(self, grid_size: int = 32) -> np.ndarray:
+        return self._ingest.feed_venturi_heat(grid_size)
+
+
+__all__ = [
+    "EdgeProfiles",
+    "SOLPSConfig",
+    "SOLPSIngest",
+    "SOLPSResult",
+    "SOLPSWrapper",
+    "synthetic_solps_edge",
+]

@@ -6,6 +6,8 @@
 - **Shot-faithful replay** — `ShotPipeline` accepts IMAS heat fields; `ReactorCell.attach_shot` / `DigitalTwin.attach_shot`; `ShotReplayer` scrubber; CLI `fuselk reactor replay`
 - **ODL public benchmark** — `sim/odl_benchmark.py` + `fuselk sim odl-benchmark` scores P_dis vs C-Mod density-limit labels
 - **Port-view radiance Phases 5–8** — `viz/radiance.py` (bremsstrahlung, Dα Doppler, blackbody divertor); `P_rad` from same continuum model; API pushes `radiance` + `device_shape`; tokamak viewer uses physics colours + elongated plasma glow; conservation tests across ITER/JET/DIII-D × presets
+- **Disruption filament (Phase 9)** — field-line-pitch beam in port view (`helix/disruption_filament.py`); API `disruption_filament`; ITER vs DIII-D length/direction differ
+- **SOLPS edge ingest** — synthetic/HDF5 SOL heat maps → Venturi (`sim/solps_ingest.py`); CLI `fuselk sim solps`
 
 ## [0.5.2] - 2026-06-24
 

@@ -303,6 +303,24 @@
     scene.add(glowOuter);
     const glow = glowInner; // legacy alias used by scale-follow code below
 
+    // Phase 9: runaway-electron filament — oriented by field-line pitch from API.
+    const filamentGeom = new THREE.CylinderGeometry(0.06, 0.02, 1.0, 10, 1, true);
+    filamentGeom.translate(0, 0.5, 0); // tip at +Y before orientation
+    const filament = new THREE.Mesh(
+      filamentGeom,
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      })
+    );
+    filament.visible = false;
+    scene.add(filament);
+    let filamentDir = new THREE.Vector3(0.2, 0.9, 0.3).normalize();
+    let filamentLength = 2.0;
+
     const oPoint = new THREE.Mesh(
       new THREE.SphereGeometry(0.14, 16, 16),
       new THREE.MeshBasicMaterial({ color: 0xff2244 })
@@ -408,6 +426,13 @@
           }
           if (typeof frame.device_shape.triangularity === 'number') {
             shapeTriangularity = frame.device_shape.triangularity;
+          }
+        }
+        if (frame.disruption_filament && Array.isArray(frame.disruption_filament.direction)) {
+          const d = frame.disruption_filament.direction;
+          filamentDir.set(d[0] || 0, d[1] || 1, d[2] || 0).normalize();
+          if (typeof frame.disruption_filament.length === 'number') {
+            filamentLength = frame.disruption_filament.length;
           }
         }
         if (typeof frame.disruption_probability === 'number') {
@@ -525,18 +550,27 @@
       oPoint.position.z = 0.2 * Math.sin(t * 0.9);
       ring.lookAt(camera.position);
 
-      // Disruption flash: hot white-red pulse, fast attack + quadratic decay
-      // so it reads as a distinct "event" against the steady orange glow
-      // rather than blending into it. ~550ms total, peak near-opaque.
+      // Disruption: field-aligned filament beam + soft screen flash.
+      // Pitch differs per device (ITER vs DIII-D) via disruption_filament.direction.
       const FLASH_MS = 550;
       const sinceFlash = now - lastDisruptionFlashAt;
       if (sinceFlash >= 0 && sinceFlash < FLASH_MS) {
         const p = sinceFlash / FLASH_MS;
-        const attack = Math.min(1, sinceFlash / 60); // 60ms ramp up to peak
-        const decay = (1 - p) * (1 - p); // quadratic falloff
-        flashEl.style.opacity = String(Math.min(0.92, attack * decay * 1.15));
+        const attack = Math.min(1, sinceFlash / 60);
+        const decay = (1 - p) * (1 - p);
+        const amp = Math.min(0.92, attack * decay * 1.15);
+        flashEl.style.opacity = String(amp * 0.55);
+        filament.visible = true;
+        filament.position.set(0, 0.1, 0);
+        const up = new THREE.Vector3(0, 1, 0);
+        filament.quaternion.setFromUnitVectors(up, filamentDir);
+        filament.scale.set(1, filamentLength * (0.7 + 0.5 * amp), 1);
+        filament.material.opacity = amp;
+        filament.material.color.setRGB(1, 0.85 + 0.15 * amp, 0.75);
       } else {
         flashEl.style.opacity = '0';
+        filament.visible = false;
+        filament.material.opacity = 0;
       }
 
       // Sim-bridge staleness: if web_panel.py's poller hangs/errors for a

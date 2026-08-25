@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from deepiri_fuselk import __version__
 from deepiri_fuselk.experiments.registry import load_registry
 from deepiri_fuselk.experiments.runner import run_experiment
+from deepiri_fuselk.helix.disruption_filament import disruption_filament
 from deepiri_fuselk.viz.radiance import radiance_from_frame
 from deepiri_fuselk.viz.simulation_engine import (
     LiveSimulation,
@@ -38,6 +39,11 @@ def _ndarray_to_list(arr: np.ndarray) -> list:
 
 
 def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
+    filament = disruption_filament(
+        frame.active_device,
+        q95=frame.q95,
+        fracture_vector=tuple(frame.helix.fracture_vector),
+    )
     return {
         "step": frame.step,
         "seed": frame.seed,
@@ -83,6 +89,7 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         "raw_heat": _ndarray_to_list(frame.raw_heat),
         "controlled_heat": _ndarray_to_list(frame.controlled_heat),
         "radiance": radiance_from_frame(frame).to_dict(),
+        "disruption_filament": filament.to_dict(),
         "device_shape": {
             "major_radius_m": frame.active_device.major_radius_m,
             "minor_radius_m": frame.active_device.minor_radius_m,
