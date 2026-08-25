@@ -13,6 +13,7 @@ import base64
 import logging
 import time
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class LiveFeedSource:
         self._source = source
         self._min_interval = 1.0 / max_fps if max_fps > 0 else 0.0
         self._jpeg_quality = jpeg_quality
-        self._cap = None  # type: ignore[var-annotated]
+        self._cap: Any = None
         self._last_capture_t = 0.0
         self._status = "not started"
         self._opened = False
@@ -101,7 +102,7 @@ class LiveFeedSource:
         now = time.monotonic()
         if now - self._last_capture_t < self._min_interval:
             return None
-        ok, frame = self._cap.read()  # type: ignore[union-attr]
+        ok, frame = self._cap.read()
         if not ok or frame is None:
             self._status = "live source stopped producing frames"
             return None
