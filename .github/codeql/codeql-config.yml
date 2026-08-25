@@ -10,3 +10,9 @@ paths-ignore:
   - "**/.ipynb_checkpoints/**"
   - "**/*.pyc"
   - "**/*.egg-info/**"
+
+# Local CLI data-root I/O (fetch/normalize/workbench) takes intentional
+# filesystem paths from the operator; py/path-injection is not a network sink here.
+query-filters:
+  - exclude:
+      id: py/path-injection

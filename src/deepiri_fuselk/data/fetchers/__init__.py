@@ -8,6 +8,7 @@ from pathlib import Path
 from deepiri_fuselk.data.fetchers.manifest import FetchRecord, load_manifest, save_manifest
 from deepiri_fuselk.data.fetchers.odl import fetch_odl
 from deepiri_fuselk.data.fetchers.synthetic import fetch_synthetic
+from deepiri_fuselk.data.paths import under_root
 
 FETCHERS: dict[str, Callable[..., FetchRecord]] = {
     "odl": fetch_odl,
@@ -53,6 +54,6 @@ def _write_catalog_snapshot(root: Path) -> None:
 
     from deepiri_fuselk.data.sources import _CATALOG_PATH
 
-    catalog_dir = root / "catalog"
+    catalog_dir = under_root(root, "catalog")
     catalog_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(_CATALOG_PATH, catalog_dir / "data_sources.yaml")
+    shutil.copy2(_CATALOG_PATH, under_root(catalog_dir, "data_sources.yaml"))

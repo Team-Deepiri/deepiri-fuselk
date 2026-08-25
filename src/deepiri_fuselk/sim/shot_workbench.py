@@ -28,6 +28,7 @@ from deepiri_fuselk.data.notebook_loaders import (
     load_odl_meta,
     resolve_data_root,
 )
+from deepiri_fuselk.data.paths import under_root
 from deepiri_fuselk.helix.disruption_filament import disruption_filament
 from deepiri_fuselk.helix.helix_engine import HelixEngine
 from deepiri_fuselk.models.disruption_detector import DisruptionDetector
@@ -264,8 +265,9 @@ def resolve_shot_path(
     """Resolve a filesystem path or ODL/synthetic shot id to an HDF5 archive."""
     candidate = Path(shot)
     if candidate.is_file():
+        # Explicit absolute/relative archives from the operator are allowed.
         return candidate.resolve()
-    root = data_root or resolve_data_root()
+    root = under_root(data_root or resolve_data_root())
     if ensure_data:
         root = ensure_fetched_data(root, n_shots=40, max_odl=20)
     needle = str(shot).strip()
@@ -276,7 +278,7 @@ def resolve_shot_path(
         if needle in (name, path.name, discharge) or needle in name:
             return path
     raise FileNotFoundError(
-        f"Shot '{shot}' not found under {root / 'shots'}. "
+        f"Shot '{shot}' not found under {under_root(root, 'shots')}. "
         "Pass an HDF5 path or run `fuselk data fetch` first."
     )
 

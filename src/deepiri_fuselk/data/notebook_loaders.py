@@ -11,6 +11,7 @@ import numpy as np
 from deepiri_fuselk.data.fetchers import run_fetch
 from deepiri_fuselk.data.fetchers.manifest import load_manifest
 from deepiri_fuselk.data.imas_loader import IMASShot, load_imas_hdf5
+from deepiri_fuselk.data.paths import under_root
 from deepiri_fuselk.sim.synthetic_data_gen import SyntheticShot
 
 
@@ -41,9 +42,9 @@ def ensure_fetched_data(
     force: bool = False,
 ) -> Path:
     """Run public fetch if manifest or corpus is missing."""
-    data_root = root or resolve_data_root()
+    data_root = under_root(root or resolve_data_root())
     manifest = load_manifest(data_root)
-    corpus = data_root / "corpus" / "elm_corpus.npz"
+    corpus = under_root(data_root, "corpus", "elm_corpus.npz")
     needs = force or not manifest.records or not corpus.exists()
     if needs:
         data_root.mkdir(parents=True, exist_ok=True)
@@ -53,7 +54,7 @@ def ensure_fetched_data(
 
 def list_shots(data_root: Path, *, source: str | None = None) -> list[Path]:
     """List HDF5 shot archives under .fuselk-data/shots/."""
-    shots_dir = data_root / "shots"
+    shots_dir = under_root(data_root, "shots")
     if not shots_dir.exists():
         return []
     paths = sorted(shots_dir.glob("*.h5"))
@@ -97,7 +98,7 @@ def imas_to_synthetic_shot(shot: IMASShot) -> SyntheticShot:
 
 def load_corpus_arrays(data_root: Path) -> dict[str, Any]:
     """Load elm_corpus.npz produced by `fuselk data fetch`."""
-    path = data_root / "corpus" / "elm_corpus.npz"
+    path = under_root(data_root, "corpus", "elm_corpus.npz")
     if not path.exists():
         raise FileNotFoundError(
             f"Corpus not found at {path}. Run: python scripts/fetch_data.py --all"
