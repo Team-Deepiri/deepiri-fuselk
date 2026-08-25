@@ -111,7 +111,5 @@ class DeviceRegistry:
             KeyError: if ``device_name`` is not registered.
         """
         if device_name not in self._presets:
-            raise KeyError(
-                f"Unknown device '{device_name}'. Known devices: {self.list_devices()}"
-            )
+            raise KeyError(f"Unknown device '{device_name}'. Known devices: {self.list_devices()}")
         return self._presets[device_name]
