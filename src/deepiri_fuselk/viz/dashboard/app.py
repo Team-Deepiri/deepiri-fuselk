@@ -473,7 +473,9 @@ def _register_callbacks(app: Dash) -> None:  # noqa: C901 - dashboard wiring, ke
             f"Ip {frame.ip_ma:.2f} MA · Bt {frame.active_device.max_bt_t:.1f} T · "
             f"Te0 {frame.te0_kev:.1f} keV"
         )
-        core2 = f"n̄e {frame.ne_bar_1e19:.1f}e19 · Wth {frame.w_th_mj:.1f} MJ · τE {frame.tau_e_s:.2f} s"
+        core2 = (
+            f"n̄e {frame.ne_bar_1e19:.1f}e19 · Wth {frame.w_th_mj:.1f} MJ · τE {frame.tau_e_s:.2f} s"
+        )
 
         return (
             build_control_room_figure(frame),
@@ -497,5 +499,3 @@ def _stat_card(title: str, elem_id: str, value: str) -> html.Div:
             html.P(value, id=elem_id, style=STAT_VALUE_STYLE),
         ],
     )
-
-

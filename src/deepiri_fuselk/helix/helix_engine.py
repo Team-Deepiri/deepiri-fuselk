@@ -74,9 +74,7 @@ class HelixEngine:
         if self._pitch_cache.size == n and self._pitch_cache.o_point == (ox, oy):
             return self._pitch_cache.pitch
         pitch = float(
-            field_line_pitch(
-                np.array([ox]), np.array([oy]), a=self.device.minor_radius_m
-            )[0]
+            field_line_pitch(np.array([ox]), np.array([oy]), a=self.device.minor_radius_m)[0]
         )
         self._pitch_cache = _PitchCache(size=n, o_point=(ox, oy), pitch=pitch)
         return pitch
