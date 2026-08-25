@@ -33,6 +33,8 @@ app.add_typer(experiments_app, name="experiments")
 app.add_typer(viz_app, name="viz")
 workbench_app = typer.Typer(help="Shot Workbench — scrub + counterfactual pulse analysis")
 app.add_typer(workbench_app, name="workbench")
+report_app = typer.Typer(help="Auto-generated performance reports (PDF / Markdown / JSON)")
+app.add_typer(report_app, name="report")
 
 
 @app.command()
@@ -54,6 +56,7 @@ def doctor(
         "pyarrow",
         "gymnasium",
         "stable_baselines3",
+        "fpdf",
     ]
     table = Table(title="fuselk doctor")
     table.add_column("Module")
@@ -426,7 +429,9 @@ def workbench_analyze(
     ),
     data_root: Path | None = typer.Option(None, "--data-root"),
     steps: int = typer.Option(24, "--steps", "-n"),
-    export_dir: Path | None = typer.Option(None, "--export", help="Write JSON + Markdown"),
+    export_dir: Path | None = typer.Option(
+        None, "--export", help="Write JSON + Markdown + performance PDF"
+    ),
     fetch: bool = typer.Option(False, "--fetch", help="Fetch public data if missing"),
 ) -> None:
     """Scrub one pulse: HELIX + disruption + Venturi open/closed counterfactual."""
@@ -438,6 +443,8 @@ def workbench_analyze(
         paths = wb.export(report, export_dir)
         console.print(f"[green]Wrote {paths['json']}[/green]")
         console.print(f"[green]Wrote {paths['markdown']}[/green]")
+        if "pdf" in paths:
+            console.print(f"[green]Wrote {paths['pdf']}[/green]")
     console.print(report.to_markdown())
 
 
@@ -475,6 +482,119 @@ def workbench_batch(
         if export_dir is not None:
             wb.export(r, export_dir / r.shot_id)
     console.print(table)
+
+
+@report_app.command("pdf")
+def report_pdf(
+    kind: str = typer.Argument(
+        "workbench",
+        help="Report kind: workbench | odl | fusion",
+    ),
+    shot: str = typer.Option("1140226012", "--shot", "-s"),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    output: Path = typer.Option(Path("exports/performance_report.pdf"), "--output", "-o"),
+    steps: int = typer.Option(16, "--steps", "-n"),
+    fetch: bool = typer.Option(False, "--fetch"),
+    max_shots: int = typer.Option(8, "--max-shots"),
+) -> None:
+    """Auto-generate a branded performance PDF (Workbench / ODL / FusionCell)."""
+    from deepiri_fuselk import __version__
+    from deepiri_fuselk.reports import (
+        from_fusion_cell,
+        from_odl_benchmark,
+        from_workbench,
+        render_performance_pdf,
+    )
+
+    kind = kind.lower().strip()
+    if kind == "workbench":
+        from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+        wb = ShotWorkbench(data_root=data_root)
+        perf = from_workbench(
+            wb.analyze(shot, n_steps=steps, ensure_data=fetch),
+            version=__version__,
+        )
+    elif kind == "odl":
+        from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+        perf = from_odl_benchmark(
+            run_odl_benchmark(
+                data_root, max_shots=max_shots, steps_per_shot=steps, ensure_data=fetch
+            ),
+            version=__version__,
+        )
+    elif kind == "fusion":
+        from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+        _, cell_report = FusionCell(grid_size=16, train_elm=False).run(n_steps=steps, seed=42)
+        perf = from_fusion_cell(cell_report, version=__version__, steps=steps)
+    else:
+        console.print(f"[red]Unknown kind '{kind}'. Use workbench, odl, or fusion.[/red]")
+        raise typer.Exit(code=1)
+
+    path = render_performance_pdf(perf, output)
+    md = output.with_suffix(".md")
+    md.write_text(perf.to_markdown())
+    console.print(f"[green]PDF:[/green] {path}")
+    console.print(f"[green]Markdown:[/green] {md}")
+
+
+@report_app.command("dossier")
+def report_dossier(
+    kind: str = typer.Argument(
+        "workbench",
+        help="Report kind: workbench | odl | fusion",
+    ),
+    shot: str = typer.Option("1140226012", "--shot", "-s"),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    out_dir: Path = typer.Option(Path("exports"), "--out-dir", "-o"),
+    stem: str | None = typer.Option(None, "--stem", help="Filename stem (default from kind/shot)"),
+    steps: int = typer.Option(16, "--steps", "-n"),
+    fetch: bool = typer.Option(False, "--fetch"),
+    max_shots: int = typer.Option(8, "--max-shots"),
+) -> None:
+    """Export a complete physicist pack: JSON + Markdown + branded PDF."""
+    from deepiri_fuselk import __version__
+    from deepiri_fuselk.reports import (
+        export_dossier,
+        from_fusion_cell,
+        from_odl_benchmark,
+        from_workbench,
+    )
+
+    kind = kind.lower().strip()
+    if kind == "workbench":
+        from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+        wb = ShotWorkbench(data_root=data_root)
+        wb_report = wb.analyze(shot, n_steps=steps, ensure_data=fetch)
+        perf = from_workbench(wb_report, version=__version__)
+        name = stem or f"workbench_{wb_report.shot_id}"
+    elif kind == "odl":
+        from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+        perf = from_odl_benchmark(
+            run_odl_benchmark(
+                data_root, max_shots=max_shots, steps_per_shot=steps, ensure_data=fetch
+            ),
+            version=__version__,
+        )
+        name = stem or "odl_benchmark"
+    elif kind == "fusion":
+        from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+        _, cell_report = FusionCell(grid_size=16, train_elm=False).run(n_steps=steps, seed=42)
+        perf = from_fusion_cell(cell_report, version=__version__, steps=steps)
+        name = stem or "fusion_cell"
+    else:
+        console.print(f"[red]Unknown kind '{kind}'. Use workbench, odl, or fusion.[/red]")
+        raise typer.Exit(code=1)
+
+    paths = export_dossier(perf, out_dir, stem=name)
+    console.print(f"[bold]Performance dossier[/bold] → {out_dir.resolve()}")
+    for label, path in paths.items():
+        console.print(f"  [green]{label}:[/green] {path}")
 
 
 @app.command("gui")

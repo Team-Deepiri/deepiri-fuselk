@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from deepiri_fuselk import __version__
@@ -151,6 +151,15 @@ class SeekRequest(BaseModel):
     index: int = Field(ge=0)
 
 
+class PerformancePdfRequest(BaseModel):
+    kind: str = Field(default="workbench", description="workbench | odl | fusion")
+    shot: str = "1140226012"
+    n_steps: int = Field(default=16, ge=2, le=128)
+    data_root: str | None = None
+    ensure_data: bool = False
+    max_shots: int = Field(default=8, ge=1, le=40)
+
+
 def create_api() -> FastAPI:
     api = FastAPI(title="deepiri-fuselk API", version=__version__)
     api.add_middleware(
@@ -177,6 +186,7 @@ def create_api() -> FastAPI:
             "stable_baselines3",
             "dash",
             "plotly",
+            "fpdf",
         ]
         results: list[dict[str, str]] = []
         ok = True
@@ -345,6 +355,66 @@ def create_api() -> FastAPI:
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return report.to_dict()
+
+    @api.post("/api/report/pdf")
+    def report_pdf(req: PerformancePdfRequest) -> Response:
+        """Auto-generate a performance PDF and return the bytes."""
+        import tempfile
+
+        from deepiri_fuselk.reports import (
+            from_fusion_cell,
+            from_odl_benchmark,
+            from_workbench,
+            render_performance_pdf,
+        )
+
+        kind = req.kind.lower().strip()
+        root = Path(req.data_root) if req.data_root else None
+        try:
+            if kind == "workbench":
+                from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+                wb_report = ShotWorkbench(data_root=root).analyze(
+                    req.shot,
+                    n_steps=req.n_steps,
+                    ensure_data=req.ensure_data,
+                )
+                perf = from_workbench(wb_report, version=__version__)
+            elif kind == "odl":
+                from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+                perf = from_odl_benchmark(
+                    run_odl_benchmark(
+                        root,
+                        max_shots=req.max_shots,
+                        steps_per_shot=req.n_steps,
+                        ensure_data=req.ensure_data,
+                    ),
+                    version=__version__,
+                )
+            elif kind == "fusion":
+                from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+                _, cell_report = FusionCell(grid_size=16, train_elm=False).run(
+                    n_steps=req.n_steps, seed=42
+                )
+                perf = from_fusion_cell(cell_report, version=__version__, steps=req.n_steps)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="kind must be workbench, odl, or fusion",
+                )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = render_performance_pdf(perf, Path(tmp) / "performance.pdf")
+            data = path.read_bytes()
+        return Response(
+            content=data,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="fuselk_performance.pdf"'},
+        )
 
     @api.get("/api/static/{filename}")
     def static_file(filename: str) -> FileResponse:
