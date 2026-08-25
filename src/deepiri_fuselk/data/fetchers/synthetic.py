@@ -8,6 +8,7 @@ import numpy as np
 
 from deepiri_fuselk.data.fetchers.manifest import FetchRecord, now_iso
 from deepiri_fuselk.data.imas_loader import export_imas_hdf5, synthetic_imas_shot
+from deepiri_fuselk.data.paths import under_root
 from deepiri_fuselk.sim.shot_corpus import generate_corpus
 
 
@@ -18,13 +19,14 @@ def fetch_synthetic(
     grid_size: int = 32,
     seed: int = 42,
 ) -> FetchRecord:
-    corpus_dir = root / "corpus"
-    shots_dir = root / "shots"
+    base = under_root(root)
+    corpus_dir = under_root(base, "corpus")
+    shots_dir = under_root(base, "shots")
     corpus_dir.mkdir(parents=True, exist_ok=True)
     shots_dir.mkdir(parents=True, exist_ok=True)
 
     corpus = generate_corpus(n_shots=n_shots, grid_size=grid_size, seed=seed)
-    corpus_path = corpus_dir / "elm_corpus.npz"
+    corpus_path = under_root(corpus_dir, "elm_corpus.npz")
     np.savez_compressed(
         corpus_path,
         features=corpus.features_matrix(),
@@ -37,15 +39,15 @@ def fetch_synthetic(
     for i in range(min(n_shots, 20)):
         sid = f"SYN{seed + i:04d}"
         shot = synthetic_imas_shot(sid, size=grid_size, seed=seed + i)
-        shot_paths.append(export_imas_hdf5(shot, shots_dir / f"{sid}.h5"))
+        shot_paths.append(export_imas_hdf5(shot, under_root(shots_dir, f"{sid}.h5")))
 
     return FetchRecord(
         source_id="synthetic",
         status="ok",
         fetched_at=now_iso(),
         files=[
-            str(corpus_path.relative_to(root)),
-            *[str(p.relative_to(root)) for p in shot_paths],
+            str(corpus_path.relative_to(base)),
+            *[str(p.relative_to(base)) for p in shot_paths],
         ],
         shots_written=len(shot_paths),
         details={

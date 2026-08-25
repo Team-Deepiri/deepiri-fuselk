@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from deepiri_fuselk.data.paths import under_root
+
 
 @dataclass
 class FetchRecord:
@@ -33,7 +35,7 @@ class Manifest:
 
 
 def manifest_path(root: Path) -> Path:
-    return root / "manifest.json"
+    return under_root(root, "manifest.json")
 
 
 def load_manifest(root: Path) -> Manifest:
@@ -46,8 +48,9 @@ def load_manifest(root: Path) -> Manifest:
 
 
 def save_manifest(root: Path, manifest: Manifest) -> Path:
-    root.mkdir(parents=True, exist_ok=True)
-    path = manifest_path(root)
+    base = under_root(root)
+    base.mkdir(parents=True, exist_ok=True)
+    path = manifest_path(base)
     path.write_text(json.dumps(manifest.to_dict(), indent=2))
     return path
 

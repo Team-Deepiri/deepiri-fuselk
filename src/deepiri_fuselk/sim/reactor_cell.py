@@ -79,8 +79,18 @@ class ReactorCell:
         self._pipeline = ShotPipeline(self.helix, self.detector, self.hybrid)
         self._fuel_cycle = fuel_cycle or build_fuel_cycle_context(grid_size)
         self.imas: IMASShot = synthetic_imas_shot(size=grid_size)
+        self.use_imas_heat: bool = False
         self._step = 0
         self._kpi_acc = RunningKPIAccumulator()
+
+    def attach_shot(self, shot: IMASShot, *, use_heat: bool = True) -> None:
+        """Bind an IMAS archive so subsequent steps replay its profiles/heat."""
+        self.imas = shot
+        self.use_imas_heat = use_heat
+        self.grid_size = int(shot.heat_field.shape[0])
+        self.hybrid.venturi.reset()
+        self._step = 0
+        self._kpi_acc.reset()
 
     @staticmethod
     def _init_elm(train_elm: bool, model_path: Path | None, grid_size: int) -> ELMPredictor:
@@ -99,7 +109,8 @@ class ReactorCell:
     def reset(self, seed: int = 42) -> ReactorStep:
         self._step = 0
         self._kpi_acc.reset()
-        self.imas = synthetic_imas_shot(size=self.grid_size, seed=seed)
+        if not self.use_imas_heat:
+            self.imas = synthetic_imas_shot(size=self.grid_size, seed=seed)
         self.hybrid.venturi.reset()
         return self.step(seed=seed)
 
@@ -112,6 +123,7 @@ class ReactorCell:
             seed=s,
             q_profile_values=np.array(self.imas.q_profile.values, dtype=np.float64),
             te_profile_values=np.array(self.imas.Te_profile.values, dtype=np.float64),
+            imas=self.imas if self.use_imas_heat else None,
         )
 
         self._kpi_acc.update(

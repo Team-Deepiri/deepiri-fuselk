@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from deepiri_fuselk.data.imas_loader import IMASShot, export_imas_hdf5
+from deepiri_fuselk.data.paths import under_root
 from deepiri_fuselk.data.schemas import ProfileData
 from deepiri_fuselk.sim.synthetic_data_gen import generate_ece_shot
 
@@ -29,9 +30,11 @@ def odl_csv_to_shots(
     Experimental scalars become radial profiles; ECE heat fields are seeded
     deterministically per discharge so HELIX/ELM pipelines have 2D input.
     """
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_base = under_root(out_dir)
+    out_base.mkdir(parents=True, exist_ok=True)
     by_discharge: dict[str, list[dict[str, str]]] = {}
-    with csv_path.open(newline="", encoding="utf-8") as f:
+    csv_resolved = Path(csv_path).resolve()
+    with csv_resolved.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             by_discharge.setdefault(row["discharge_ID"], []).append(row)
@@ -90,7 +93,7 @@ def odl_csv_to_shots(
             heat_field=ece.heat_field,
             dataset=None,
         )
-        out = export_imas_hdf5(shot, out_dir / f"CMOD_{discharge_id}.h5")
+        out = export_imas_hdf5(shot, under_root(out_base, f"CMOD_{discharge_id}.h5"))
         _annotate_odl_metadata(
             out,
             discharge_id=discharge_id,

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from deepiri_fuselk.data.fetchers.manifest import FetchRecord, now_iso
 from deepiri_fuselk.data.normalize import odl_csv_to_shots
+from deepiri_fuselk.data.paths import under_root
 from deepiri_fuselk.data.sources import get_source
 
 ODL_CSV_URL = "https://raw.githubusercontent.com/MIT-PSFC/open_density_limit_database/main/data/DL_DataFrame.csv"
@@ -28,11 +29,12 @@ def fetch_odl(
     max_discharges: int | None = 50,
 ) -> FetchRecord:
     src = get_source("odl")
-    raw_dir = root / "raw" / "odl"
-    shots_dir = root / "shots"
+    base = under_root(root)
+    raw_dir = under_root(base, "raw", "odl")
+    shots_dir = under_root(base, "shots")
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    csv_path = raw_dir / "DL_DataFrame.csv"
+    csv_path = under_root(raw_dir, "DL_DataFrame.csv")
     if force or not csv_path.exists():
         urllib.request.urlretrieve(ODL_CSV_URL, csv_path)
 
@@ -41,7 +43,7 @@ def fetch_odl(
         source_id="odl",
         status="ok",
         fetched_at=now_iso(),
-        files=[str(csv_path.relative_to(root)), *[str(p.relative_to(root)) for p in written]],
+        files=[str(csv_path.relative_to(base)), *[str(p.relative_to(base)) for p in written]],
         shots_written=len(written),
         details={
             "checksum_sha256": _sha256(csv_path),

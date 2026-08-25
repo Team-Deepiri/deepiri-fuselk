@@ -9,12 +9,14 @@ from typing import Any
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from deepiri_fuselk import __version__
 from deepiri_fuselk.experiments.registry import load_registry
 from deepiri_fuselk.experiments.runner import run_experiment
+from deepiri_fuselk.helix.disruption_filament import disruption_filament
+from deepiri_fuselk.viz.radiance import radiance_from_frame
 from deepiri_fuselk.viz.simulation_engine import (
     LiveSimulation,
     SimulationFrame,
@@ -25,7 +27,7 @@ from deepiri_fuselk.viz.simulation_engine import (
 _STATIC = Path(__file__).resolve().parent / "static"
 _STATIC_ROOT = _STATIC.resolve()
 _ALLOWED_STATIC: dict[str, Path] = {}
-for _rel in ("tokamak_viewer.html", "branding/deepiri_favicon.svg"):
+for _rel in ("tokamak_viewer.html", "reactor_theatre.html", "branding/deepiri_favicon.svg"):
     _candidate = (_STATIC / _rel).resolve()
     if _candidate.is_relative_to(_STATIC_ROOT):
         _ALLOWED_STATIC[_rel] = _candidate
@@ -37,6 +39,12 @@ def _ndarray_to_list(arr: np.ndarray) -> list:
 
 
 def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
+    fx, fy = frame.helix.fracture_vector
+    filament = disruption_filament(
+        frame.active_device,
+        q95=frame.q95,
+        fracture_vector=(float(fx), float(fy)),
+    )
     return {
         "step": frame.step,
         "seed": frame.seed,
@@ -72,6 +80,22 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         "target_beta_n": frame.target_beta_n,
         "target_li": frame.target_li,
         "target_d_alpha": frame.target_d_alpha,
+        "mode": frame.mode,
+        "shot_id": frame.shot_id,
+        "scrub_index": frame.scrub_index,
+        "scrub_n": frame.scrub_n,
+        "time_s": frame.time_s,
+        "odl_label": frame.odl_label,
+        "density": frame.density,
+        "pulse_phase": frame.pulse_phase,
+        "pulse_progress": frame.pulse_progress,
+        "pulse_duration_s": frame.pulse_duration_s,
+        "p_fusion_mw": frame.p_fusion_mw,
+        "p_alpha_mw": frame.p_alpha_mw,
+        "q_factor": frame.q_factor,
+        "divertor_peak_mw_m2": frame.divertor_peak_mw_m2,
+        "pulse_narrative": frame.pulse_narrative,
+        "pulse_alive": frame.pulse_alive,
         "helix": {
             "o_point": list(frame.helix.o_point),
             "phase_locked_snr": frame.helix.phase_locked_snr,
@@ -81,6 +105,14 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         },
         "raw_heat": _ndarray_to_list(frame.raw_heat),
         "controlled_heat": _ndarray_to_list(frame.controlled_heat),
+        "radiance": radiance_from_frame(frame).to_dict(),
+        "disruption_filament": filament.to_dict(),
+        "device_shape": {
+            "major_radius_m": frame.active_device.major_radius_m,
+            "minor_radius_m": frame.active_device.minor_radius_m,
+            "elongation": frame.active_device.elongation,
+            "triangularity": frame.active_device.triangularity,
+        },
     }
 
 
@@ -109,6 +141,41 @@ class OilWaterRequest(BaseModel):
     n_grid: int = Field(default=32, ge=16, le=128)
 
 
+class WorkbenchRequest(BaseModel):
+    shot: str = "1140226012"
+    n_steps: int = Field(default=24, ge=2, le=128)
+    data_root: str | None = None
+    ensure_data: bool = False
+
+
+class AttachShotRequest(BaseModel):
+    shot: str
+    n_steps: int = Field(default=24, ge=2, le=128)
+    data_root: str | None = None
+    ensure_data: bool = False
+    seed: int = 42
+
+
+class SeekRequest(BaseModel):
+    index: int = Field(ge=0)
+
+
+class PerformancePdfRequest(BaseModel):
+    kind: str = Field(default="workbench", description="workbench | odl | fusion")
+    shot: str = "1140226012"
+    n_steps: int = Field(default=16, ge=2, le=128)
+    data_root: str | None = None
+    ensure_data: bool = False
+    max_shots: int = Field(default=8, ge=1, le=40)
+
+
+class PulseStartRequest(BaseModel):
+    device: str = "ITER"
+    preset: str = "H-mode"
+    dt_s: float = Field(default=2.0, ge=0.1, le=20.0)
+    seed: int = 42
+
+
 def create_api() -> FastAPI:
     api = FastAPI(title="deepiri-fuselk API", version=__version__)
     api.add_middleware(
@@ -135,6 +202,7 @@ def create_api() -> FastAPI:
             "stable_baselines3",
             "dash",
             "plotly",
+            "fpdf",
         ]
         results: list[dict[str, str]] = []
         ok = True
@@ -171,6 +239,7 @@ def create_api() -> FastAPI:
         if cfg.grid_size != _sim.grid_size:
             _sim = LiveSimulation(grid_size=cfg.grid_size, device=cfg.device, preset=cfg.preset)
         else:
+            _sim.clear_scrub()
             _sim.set_device(cfg.device)
             _sim.set_preset(cfg.preset)
         return frame_to_dict(_sim.reset(seed=cfg.seed))
@@ -191,6 +260,44 @@ def create_api() -> FastAPI:
     def sim_set_preset(req: PresetSelect) -> dict[str, Any]:
         _sim.set_preset(req.preset)
         return frame_to_dict(_sim.step())
+
+    @api.post("/api/sim/attach-shot")
+    def sim_attach_shot(req: AttachShotRequest) -> dict[str, Any]:
+        root = Path(req.data_root) if req.data_root else None
+        try:
+            frame = _sim.attach_shot(
+                req.shot,
+                n_steps=req.n_steps,
+                seed=req.seed,
+                data_root=root,
+                ensure_data=req.ensure_data,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return frame_to_dict(frame)
+
+    @api.post("/api/sim/seek")
+    def sim_seek(req: SeekRequest) -> dict[str, Any]:
+        try:
+            return frame_to_dict(_sim.seek(req.index))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @api.post("/api/sim/detach-shot")
+    def sim_detach_shot() -> dict[str, Any]:
+        return frame_to_dict(_sim.detach_shot())
+
+    @api.get("/api/sim/scrub")
+    def sim_scrub_state() -> dict[str, Any]:
+        return _sim.scrub_state()
+
+    @api.post("/api/sim/pulse/start")
+    def sim_pulse_start(req: PulseStartRequest) -> dict[str, Any]:
+        return frame_to_dict(_sim.start_pulse(req.device, req.preset, dt_s=req.dt_s, seed=req.seed))
+
+    @api.post("/api/sim/pulse/stop")
+    def sim_pulse_stop() -> dict[str, Any]:
+        return frame_to_dict(_sim.stop_pulse())
 
     @api.post("/api/sim/fusion-run")
     def sim_fusion_run(req: FusionRunRequest) -> dict[str, Any]:
@@ -255,6 +362,83 @@ def create_api() -> FastAPI:
             "effective_sticking": r.effective_sticking,
             "breakeven": r.breakeven,
         }
+
+    @api.post("/api/workbench/analyze")
+    def workbench_analyze(req: WorkbenchRequest) -> dict[str, Any]:
+        from pathlib import Path
+
+        from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+        root = Path(req.data_root) if req.data_root else None
+        try:
+            report = ShotWorkbench(data_root=root).analyze(
+                req.shot,
+                n_steps=req.n_steps,
+                ensure_data=req.ensure_data,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return report.to_dict()
+
+    @api.post("/api/report/pdf")
+    def report_pdf(req: PerformancePdfRequest) -> Response:
+        """Auto-generate a performance PDF and return the bytes."""
+        import tempfile
+
+        from deepiri_fuselk.reports import (
+            from_fusion_cell,
+            from_odl_benchmark,
+            from_workbench,
+            render_performance_pdf,
+        )
+
+        kind = req.kind.lower().strip()
+        root = Path(req.data_root) if req.data_root else None
+        try:
+            if kind == "workbench":
+                from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+                wb_report = ShotWorkbench(data_root=root).analyze(
+                    req.shot,
+                    n_steps=req.n_steps,
+                    ensure_data=req.ensure_data,
+                )
+                perf = from_workbench(wb_report, version=__version__)
+            elif kind == "odl":
+                from deepiri_fuselk.sim.odl_benchmark import run_odl_benchmark
+
+                perf = from_odl_benchmark(
+                    run_odl_benchmark(
+                        root,
+                        max_shots=req.max_shots,
+                        steps_per_shot=req.n_steps,
+                        ensure_data=req.ensure_data,
+                    ),
+                    version=__version__,
+                )
+            elif kind == "fusion":
+                from deepiri_fuselk.sim.fusion_cell import FusionCell
+
+                _, cell_report = FusionCell(grid_size=16, train_elm=False).run(
+                    n_steps=req.n_steps, seed=42
+                )
+                perf = from_fusion_cell(cell_report, version=__version__, steps=req.n_steps)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="kind must be workbench, odl, or fusion",
+                )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = render_performance_pdf(perf, Path(tmp) / "performance.pdf")
+            data = path.read_bytes()
+        return Response(
+            content=data,
+            media_type="application/pdf",
+            headers={"Content-Disposition": 'attachment; filename="fuselk_performance.pdf"'},
+        )
 
     @api.get("/api/static/{filename}")
     def static_file(filename: str) -> FileResponse:
