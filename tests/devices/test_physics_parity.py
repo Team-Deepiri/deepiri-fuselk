@@ -71,11 +71,7 @@ def _confinement_proxy(device) -> float:
     tau ~ R^1.97 * a^0.58 * B^0.15 -- monotonically increasing in device size
     and field, enough to check physically-sensible ordering across devices
     without depending on any real transport solve."""
-    return (
-        (device.major_radius_m**1.97)
-        * (device.minor_radius_m**0.58)
-        * (device.max_bt_t**0.15)
-    )
+    return (device.major_radius_m**1.97) * (device.minor_radius_m**0.58) * (device.max_bt_t**0.15)
 
 
 def test_devices_ordered_on_confinement_stored_energy_and_limits():
@@ -87,7 +83,9 @@ def test_devices_ordered_on_confinement_stored_energy_and_limits():
     iter_p, jet_p, diiid_p = (registry.get(n) for n in ("ITER", "JET", "DIII-D"))
 
     # (a) Confinement time proxy: bigger, higher-field device confines longer.
-    tau = {n: _confinement_proxy(p) for n, p in (("ITER", iter_p), ("JET", jet_p), ("DIII-D", diiid_p))}
+    tau = {
+        n: _confinement_proxy(p) for n, p in (("ITER", iter_p), ("JET", jet_p), ("DIII-D", diiid_p))
+    }
     assert tau["ITER"] > tau["JET"] > tau["DIII-D"]
 
     # (b) Stored-energy-at-disruption-onset proxy: W ~ beta_N * Ip * Bt * a
