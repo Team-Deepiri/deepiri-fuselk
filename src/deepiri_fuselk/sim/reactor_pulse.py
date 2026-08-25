@@ -218,7 +218,9 @@ class ReactorPulseEngine:
         device_gain = 0.5 + 1.5 * (d.max_ip_ma / 15.0)
         heating_gate = float(np.clip(heat / max(0.25 * d.max_heating_mw, 1.0), 0.05, 1.0))
         p_fusion = float(
-            np.clip(40.0 * (n_norm**2) * (t_norm**2) * v_norm * device_gain * heating_gate, 0.0, 900.0)
+            np.clip(
+                40.0 * (n_norm**2) * (t_norm**2) * v_norm * device_gain * heating_gate, 0.0, 900.0
+            )
         )
         if self.preset.name == "L-mode":
             p_fusion *= 0.35

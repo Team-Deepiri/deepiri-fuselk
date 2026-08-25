@@ -81,7 +81,8 @@ def disruption_filament(
     dy = np.sin(pitch) * 0.6 + 0.15 * fy
     dz = 0.35 + 0.1 * (device.max_bt_t / 5.0)
     vec = np.array([dx, dy, dz], dtype=np.float64)
-    vec /= max(np.linalg.norm(vec), 1e-9)
+    norm = float(np.linalg.norm(vec))
+    vec /= max(norm, 1e-9)
     # Length scales with minor radius so ITER filaments read longer than DIII-D.
     length = float(1.2 + 0.8 * device.minor_radius_m)
     return DisruptionFilament(

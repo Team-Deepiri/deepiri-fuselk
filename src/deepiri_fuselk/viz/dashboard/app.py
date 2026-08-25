@@ -465,7 +465,9 @@ def _register_callbacks(app: Dash) -> None:  # noqa: C901 - dashboard wiring, ke
         else:
             frame = _sim.last_frame or _sim.reset(seed=0)
 
-        scrub_range = tuple(scrub_data) if scrub_data else None
+        scrub_range: tuple[float, float] | None = None
+        if scrub_data is not None and len(scrub_data) >= 2:
+            scrub_range = (float(scrub_data[0]), float(scrub_data[1]))
         t_now = min(frame.step, _MAX_STEPS) * _DT_S
         clock = f"t = {t_now:.1f} / {_DURATION_S:.1f}s"
 
