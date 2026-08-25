@@ -34,6 +34,8 @@ def test_resolve_and_analyze_counterfactual(tmp_path: Path):
     paths = wb.export(report, tmp_path / "out")
     assert paths["json"].is_file()
     assert paths["markdown"].is_file()
+    assert paths["pdf"].is_file()
+    assert paths["pdf"].read_bytes()[:4] == b"%PDF"
 
 
 def test_analyze_batch_synthetic_fallback(tmp_path: Path):

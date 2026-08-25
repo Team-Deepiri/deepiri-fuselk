@@ -364,6 +364,7 @@ class ShotWorkbench:
         out_dir: str | Path,
         *,
         stem: str | None = None,
+        pdf: bool = True,
     ) -> dict[str, Path]:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
@@ -372,4 +373,17 @@ class ShotWorkbench:
         md_path = out / f"{name}_workbench.md"
         json_path.write_text(json.dumps(report.to_dict(), indent=2))
         md_path.write_text(report.to_markdown())
-        return {"json": json_path, "markdown": md_path}
+        paths: dict[str, Path] = {"json": json_path, "markdown": md_path}
+        if pdf:
+            from deepiri_fuselk import __version__
+            from deepiri_fuselk.reports import export_dossier, from_workbench
+
+            dossier = export_dossier(
+                from_workbench(report, version=__version__),
+                out,
+                stem=name,
+            )
+            paths["pdf"] = dossier["pdf"]
+            # Keep workbench markdown/json as primary scrub artifacts; dossier
+            # PDF is the shareable performance pack.
+        return paths
