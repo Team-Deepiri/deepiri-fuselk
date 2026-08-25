@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from deepiri_fuselk import __version__
 from deepiri_fuselk.experiments.registry import load_registry
 from deepiri_fuselk.experiments.runner import run_experiment
+from deepiri_fuselk.viz.radiance import radiance_from_frame
 from deepiri_fuselk.viz.simulation_engine import (
     LiveSimulation,
     SimulationFrame,
@@ -81,6 +82,13 @@ def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
         },
         "raw_heat": _ndarray_to_list(frame.raw_heat),
         "controlled_heat": _ndarray_to_list(frame.controlled_heat),
+        "radiance": radiance_from_frame(frame).to_dict(),
+        "device_shape": {
+            "major_radius_m": frame.active_device.major_radius_m,
+            "minor_radius_m": frame.active_device.minor_radius_m,
+            "elongation": frame.active_device.elongation,
+            "triangularity": frame.active_device.triangularity,
+        },
     }
 
 

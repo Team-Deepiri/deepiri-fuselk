@@ -187,17 +187,23 @@ class LiveSimulation:
         p_ech_mw = device.max_heating_mw * 0.15 * (0.5 + 0.5 * fusion)
         p_oh_mw = max(0.5, device.max_heating_mw * 0.05)
         p_input = p_oh_mw + p_nbi_mw + p_ech_mw
-        p_rad_mw = p_input * (0.2 + 0.3 * risk)
+
+        # Plasma volume for an elongated torus V = 2 π² R₀ a² κ (also used for W_th).
+        volume_m3 = 2.0 * np.pi**2 * r0 * a**2 * kappa
+
+        # Radiated power from the same bremsstrahlung model the port view uses
+        # (viz.radiance) — gauges and glow are one quantity, not two tuned worlds.
+        from deepiri_fuselk.viz.radiance import bremsstrahlung_power_mw
+
+        p_rad_mw = bremsstrahlung_power_mw(ne_bar_1e19, te0_kev, volume_m3)
         p_loss_mw = max(0.1, p_input - p_rad_mw * 0.5)
 
         # Stored thermal energy from the Troyon beta definition instead of an
         # arbitrary scaled constant: beta_N = beta_t[%] * a * Bt / Ip[MA]
         # (Troyon 1984) => beta_t = beta_N * Ip / (a * Bt) / 100; volume-avg
-        # pressure p = beta_t * Bt^2 / (2 mu0); plasma volume for an
-        # elongated torus V = 2 pi^2 R0 a^2 kappa; W_th = 1.5 * p * V.
+        # pressure p = beta_t * Bt^2 / (2 mu0); W_th = 1.5 * p * V.
         beta_t_pct = beta_n * ip_ma / max(a * bt, 1e-6)
         p_avg_pa = (beta_t_pct / 100.0) * bt**2 / (2.0 * _MU0)
-        volume_m3 = 2.0 * np.pi**2 * r0 * a**2 * kappa
         w_th_mj = 1.5 * p_avg_pa * volume_m3 / 1.0e6
 
         # tau_E = W_th / P_loss is the actual energy-confinement-time

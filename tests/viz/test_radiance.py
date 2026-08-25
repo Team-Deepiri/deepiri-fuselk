@@ -56,20 +56,24 @@ def test_radiance_field_composition():
 
 
 def test_integrated_radiance_scales_with_device_volume():
-    field = radiance_field(te_kev=3.0, ne_1e19=1.5, heat_flux_mw_m2=5.0)
     reg = DeviceRegistry()
     iter_p = reg.get("ITER")
     diiid = reg.get("DIII-D")
-    i_vol = integrated_core_radiance(
-        field,
+    field_i = radiance_field(
+        te_kev=3.0,
+        ne_1e19=1.5,
+        heat_flux_mw_m2=5.0,
         major_radius_m=iter_p.major_radius_m,
         minor_radius_m=iter_p.minor_radius_m,
         elongation=iter_p.elongation,
     )
-    d_vol = integrated_core_radiance(
-        field,
+    field_d = radiance_field(
+        te_kev=3.0,
+        ne_1e19=1.5,
+        heat_flux_mw_m2=5.0,
         major_radius_m=diiid.major_radius_m,
         minor_radius_m=diiid.minor_radius_m,
         elongation=diiid.elongation,
     )
-    assert i_vol > d_vol
+    assert field_i.p_rad_mw > field_d.p_rad_mw
+    assert integrated_core_radiance(field_i) == field_i.p_rad_mw

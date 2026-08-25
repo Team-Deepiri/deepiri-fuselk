@@ -194,8 +194,10 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     document.body.appendChild(renderer.domElement);
 
+    // Ambient fill — rendering choice so vessel panels stay readable (not plasma emission).
     const ambient = new THREE.AmbientLight(0x334466, 0.6);
     scene.add(ambient);
+    // Key fill for torus readability (rendering choice, not continuum physics).
     const key = new THREE.PointLight(0x88aaff, 1.2, 40);
     key.position.set(4, 3, 6);
     scene.add(key);
@@ -333,25 +335,13 @@
     }
     scene.add(divertorGroup);
 
-    // Heat-flux colour ramp: blue -> cyan -> yellow -> red -> white.
-    const HEAT_STOPS = [
-      { t: 0.0, c: new THREE.Color(0x1144aa) },
-      { t: 0.35, c: new THREE.Color(0x22ccdd) },
-      { t: 0.6, c: new THREE.Color(0xffdd33) },
-      { t: 0.85, c: new THREE.Color(0xff3311) },
-      { t: 1.0, c: new THREE.Color(0xffffff) },
-    ];
-    function heatColor(v) {
-      const x = Math.min(1, Math.max(0, v));
-      for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
-        const a = HEAT_STOPS[i];
-        const b = HEAT_STOPS[i + 1];
-        if (x >= a.t && x <= b.t) {
-          const local = (x - a.t) / Math.max(1e-6, b.t - a.t);
-          return a.c.clone().lerp(b.c, local);
-        }
+    // Discrete HEAT_STOPS removed — divertor colour comes from radiance.divertor_rgb
+    // (Planck blackbody of heat_flux_mw_m2) pushed from viz.radiance.
+    function rgbTuple(arr, fallback) {
+      if (Array.isArray(arr) && arr.length >= 3) {
+        return new THREE.Color(arr[0], arr[1], arr[2]);
       }
-      return HEAT_STOPS[HEAT_STOPS.length - 1].c.clone();
+      return fallback.clone();
     }
 
     camera.position.set(0, 1.3, 9.6);
@@ -364,21 +354,22 @@
     });
 
     // ---- Real-data bridge state (pushed from web_panel.py via runJavaScript) ----
-    // Normalised [0,1] plasma intensity + per-plate heat samples, updated by
-    // window.__fuselk_updateFrame(frame). Defaults keep the pre-existing
-    // procedural look until the first real frame arrives.
-    let heatIntensity = 0.45; // drives plasma glow brightness/colour
+    // Defaults keep a readable look until the first RadianceField arrives.
+    let heatIntensity = 0.45;
     let divertorHeat = new Array(DIVERTOR_COUNT).fill(0.3);
     let disruptionProb = 0;
     let lastDisruptionFlashAt = -1e9;
-    let lastFrameReceivedAt = 0; // 0 = never received a real frame yet
+    let lastFrameReceivedAt = 0;
+    let radianceCore = new THREE.Color(0xff6622);
+    let radianceDivertor = new THREE.Color(0x2255aa);
+    let lineShiftFactor = 0;
+    let shapeElongation = 1.0;
+    let shapeTriangularity = 0.0;
     const flashEl = document.getElementById('disruption-flash');
     const statusEl = document.getElementById('status-line');
-    const STALE_AFTER_MS = 3000; // if web_panel.py's bridge stalls, say so instead of freezing silently
+    const STALE_AFTER_MS = 3000;
 
     function flattenHeat(arr) {
-      // raw_heat / controlled_heat arrive as a 2D grid (list of lists);
-      // flatten defensively so this also tolerates a flat array.
       const out = [];
       const walk = (v) => {
         if (Array.isArray(v)) { v.forEach(walk); } else if (typeof v === 'number') { out.push(v); }
@@ -394,18 +385,34 @@
           const max = Math.max(...flat, 1e-6);
           const mean = flat.reduce((s, v) => s + v, 0) / flat.length;
           heatIntensity = Math.min(1, mean / max);
-          // Resample the flattened grid onto the divertor ring by nearest index.
           for (let i = 0; i < DIVERTOR_COUNT; i++) {
             const idx = Math.floor((i / DIVERTOR_COUNT) * flat.length);
             divertorHeat[i] = Math.min(1, (flat[idx] || 0) / max);
           }
         }
+        // Physically-derived radiance (viz.radiance) — same data as P_rad gauge.
+        if (frame.radiance) {
+          const r = frame.radiance;
+          radianceCore = rgbTuple(r.core_rgb, radianceCore);
+          radianceDivertor = rgbTuple(r.divertor_rgb, radianceDivertor);
+          if (typeof r.line_shift_factor === 'number') lineShiftFactor = r.line_shift_factor;
+          if (typeof r.core_intensity === 'number') {
+            heatIntensity = Math.min(1, Math.max(0.05, r.core_intensity / (r.core_intensity + 5)));
+          }
+          if (typeof r.elongation === 'number') shapeElongation = r.elongation;
+          if (typeof r.triangularity === 'number') shapeTriangularity = r.triangularity;
+        }
+        if (frame.device_shape) {
+          if (typeof frame.device_shape.elongation === 'number') {
+            shapeElongation = frame.device_shape.elongation;
+          }
+          if (typeof frame.device_shape.triangularity === 'number') {
+            shapeTriangularity = frame.device_shape.triangularity;
+          }
+        }
         if (typeof frame.disruption_probability === 'number') {
           const wasCalm = disruptionProb <= 0.6;
           disruptionProb = frame.disruption_probability;
-          // Flash on the rising edge into "risky" territory, not on every
-          // tick that happens to stay above threshold — a one-shot pulse
-          // reads as an event; a sustained glow would just look stuck on.
           if (wasCalm && disruptionProb > 0.6) {
             lastDisruptionFlashAt = performance.now();
           }
@@ -413,10 +420,12 @@
         lastFrameReceivedAt = performance.now();
         if (statusEl && currentMode !== 'live') {
           const fusionPct = typeof frame.fusion_score === 'number' ? (frame.fusion_score * 100).toFixed(0) + '%' : '—';
-          statusEl.textContent = `sim step ${frame.step ?? '—'} · fusion ${fusionPct} · disruption ${(disruptionProb * 100).toFixed(0)}%`;
+          const prad = frame.radiance && typeof frame.radiance.p_rad_mw === 'number'
+            ? frame.radiance.p_rad_mw.toFixed(1) + ' MW'
+            : '—';
+          statusEl.textContent = `sim step ${frame.step ?? '—'} · fusion ${fusionPct} · P_rad ${prad} · disruption ${(disruptionProb * 100).toFixed(0)}%`;
         }
       } catch (err) {
-        // Never let a malformed payload break the render loop.
         console.warn('fuselk: bad sim frame', err);
       }
     };
@@ -480,24 +489,32 @@
 
       const pulse = 1 + Math.sin(t * 2.2) * 0.04;
       const heatScale = 0.9 + heatIntensity * 0.35;
-      plasma.scale.setScalar(pulse * heatScale);
-      glowInner.scale.copy(plasma.scale).multiplyScalar(1.15 + heatIntensity * 0.25);
-      glowOuter.scale.copy(plasma.scale).multiplyScalar(1.55 + heatIntensity * 0.4);
+      // Phase 8: elongate plasma column by device κ; slight X-shift for δ.
+      const sx = pulse * heatScale * (1.0 - 0.12 * shapeTriangularity);
+      const sy = pulse * heatScale * Math.max(0.7, shapeElongation * 0.55);
+      const sz = pulse * heatScale;
+      plasma.scale.set(sx, sy, sz);
+      plasma.position.x = 0.15 * shapeTriangularity;
+      glowInner.scale.set(sx * 1.15, sy * 1.15, sz * 1.15);
+      glowOuter.scale.set(sx * 1.55, sy * 1.55, sz * 1.55);
 
-      const plasmaColor = heatColor(0.3 + heatIntensity * 0.7);
+      // Core colour from radiance.core_rgb; Doppler tint shifts hue by line_shift_factor.
+      const plasmaColor = radianceCore.clone();
+      if (lineShiftFactor !== 0) {
+        // Positive shift → redder; negative → bluer (Dα Doppler).
+        plasmaColor.offsetHSL(lineShiftFactor * 0.04, 0, lineShiftFactor * 0.02);
+      }
       plasma.material.color.copy(plasmaColor);
       plasma.material.emissive.copy(plasmaColor).multiplyScalar(0.35 + heatIntensity * 0.4);
       glowInner.material.color.copy(plasmaColor);
-      // Slightly hotter opacity floor/ceiling than the first pass — this
-      // panel typically fills a large bottom-right tile in the control-room
-      // grid, and the additive shells need more presence at that scale to
-      // still read as "glow" rather than a faint tint.
+      // Opacity from continuum intensity (physics), not a free slider.
       glowInner.material.opacity = 0.2 + heatIntensity * 0.26;
       glowOuter.material.color.copy(plasmaColor);
       glowOuter.material.opacity = 0.09 + heatIntensity * 0.18;
 
       for (let i = 0; i < DIVERTOR_COUNT; i++) {
-        const c = heatColor(divertorHeat[i]);
+        // Per-plate: lerp blackbody divertor colour by local heat sample.
+        const c = radianceDivertor.clone().lerp(new THREE.Color(0xffffff), divertorHeat[i] * 0.35);
         const mat = divertorPlates[i].material;
         mat.color.copy(c);
         mat.emissive.copy(c).multiplyScalar(0.25 + divertorHeat[i] * 0.5);
