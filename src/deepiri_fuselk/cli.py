@@ -31,6 +31,8 @@ app.add_typer(reactor_app, name="reactor")
 experiments_app = typer.Typer(help="Run catalog experiments")
 app.add_typer(experiments_app, name="experiments")
 app.add_typer(viz_app, name="viz")
+workbench_app = typer.Typer(help="Shot Workbench — scrub + counterfactual pulse analysis")
+app.add_typer(workbench_app, name="workbench")
 
 
 @app.command()
@@ -415,6 +417,64 @@ def viz_serve(host: str = "127.0.0.1", port: int = 8050) -> None:
     from deepiri_fuselk.viz.dashboard.app import create_app
 
     create_app().run_server(host=host, port=port, debug=False)
+
+
+@workbench_app.command("analyze")
+def workbench_analyze(
+    shot: str = typer.Option(
+        "1140226012", "--shot", "-s", help="ODL/synthetic shot id or HDF5 path"
+    ),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    steps: int = typer.Option(24, "--steps", "-n"),
+    export_dir: Path | None = typer.Option(None, "--export", help="Write JSON + Markdown"),
+    fetch: bool = typer.Option(False, "--fetch", help="Fetch public data if missing"),
+) -> None:
+    """Scrub one pulse: HELIX + disruption + Venturi open/closed counterfactual."""
+    from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+    wb = ShotWorkbench(data_root=data_root)
+    report = wb.analyze(shot, n_steps=steps, ensure_data=fetch)
+    if export_dir is not None:
+        paths = wb.export(report, export_dir)
+        console.print(f"[green]Wrote {paths['json']}[/green]")
+        console.print(f"[green]Wrote {paths['markdown']}[/green]")
+    console.print(report.to_markdown())
+
+
+@workbench_app.command("batch")
+def workbench_batch(
+    limit: int = typer.Option(5, "--limit", "-n"),
+    data_root: Path | None = typer.Option(None, "--data-root"),
+    steps: int = typer.Option(16, "--steps"),
+    export_dir: Path | None = typer.Option(None, "--export"),
+    fetch: bool = typer.Option(True, "--fetch/--no-fetch"),
+) -> None:
+    """Batch-analyze ODL shots and summarize counterfactual deltas."""
+    from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+    wb = ShotWorkbench(data_root=data_root)
+    reports = wb.analyze_batch(
+        data_root=data_root, max_shots=limit, n_steps=steps, ensure_data=fetch
+    )
+    table = Table(title="Shot Workbench batch")
+    table.add_column("Shot")
+    table.add_column("P_rad MW")
+    table.add_column("Δ P_dis")
+    table.add_column("Δ uniformity")
+    table.add_column("Lead time s")
+    for r in reports:
+        cf = r.counterfactual
+        lead = f"{cf.lead_time_s:.3f}" if cf.lead_time_s is not None else "—"
+        table.add_row(
+            r.shot_id,
+            f"{r.radiance_p_rad_mw:.3f}",
+            f"{cf.delta_p_dis:+.3f}",
+            f"{cf.delta_uniformity:+.3f}",
+            lead,
+        )
+        if export_dir is not None:
+            wb.export(r, export_dir / r.shot_id)
+    console.print(table)
 
 
 @app.command("gui")

@@ -39,10 +39,11 @@ def _ndarray_to_list(arr: np.ndarray) -> list:
 
 
 def frame_to_dict(frame: SimulationFrame) -> dict[str, Any]:
+    fx, fy = frame.helix.fracture_vector
     filament = disruption_filament(
         frame.active_device,
         q95=frame.q95,
-        fracture_vector=tuple(frame.helix.fracture_vector),
+        fracture_vector=(float(fx), float(fy)),
     )
     return {
         "step": frame.step,
@@ -122,6 +123,13 @@ class FusionRunRequest(BaseModel):
 class OilWaterRequest(BaseModel):
     mode: str = "steady"
     n_grid: int = Field(default=32, ge=16, le=128)
+
+
+class WorkbenchRequest(BaseModel):
+    shot: str = "1140226012"
+    n_steps: int = Field(default=24, ge=2, le=128)
+    data_root: str | None = None
+    ensure_data: bool = False
 
 
 def create_api() -> FastAPI:
@@ -270,6 +278,23 @@ def create_api() -> FastAPI:
             "effective_sticking": r.effective_sticking,
             "breakeven": r.breakeven,
         }
+
+    @api.post("/api/workbench/analyze")
+    def workbench_analyze(req: WorkbenchRequest) -> dict[str, Any]:
+        from pathlib import Path
+
+        from deepiri_fuselk.sim.shot_workbench import ShotWorkbench
+
+        root = Path(req.data_root) if req.data_root else None
+        try:
+            report = ShotWorkbench(data_root=root).analyze(
+                req.shot,
+                n_steps=req.n_steps,
+                ensure_data=req.ensure_data,
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return report.to_dict()
 
     @api.get("/api/static/{filename}")
     def static_file(filename: str) -> FileResponse:
