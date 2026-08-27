@@ -1,13 +1,21 @@
 name: CI
 
 on:
-  push:
-    branches: [main, dev]
   pull_request:
     branches: [main, dev]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE*'
+  workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
+    timeout-minutes: 20
     name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
@@ -27,6 +35,7 @@ jobs:
         run: poetry run mypy src/deepiri_fuselk
 
   test:
+    timeout-minutes: 20
     name: Test
     runs-on: ubuntu-latest
     needs: lint
@@ -48,6 +57,7 @@ jobs:
         continue-on-error: true
 
   benchmark:
+    timeout-minutes: 20
     name: Benchmark Suite
     runs-on: ubuntu-latest
     needs: test
@@ -64,6 +74,7 @@ jobs:
         run: poetry run python scripts/benchmark.py --physics --helix --twin --reactor --twin-steps 20 --reactor-steps 20
 
   docker:
+    timeout-minutes: 20
     name: Docker Build
     runs-on: ubuntu-latest
     needs: lint
