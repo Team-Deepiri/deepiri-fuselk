@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "deepiri-fuselk"
-version = "0.5.0"
+version = "0.6.0"
 description = "Fusion Unified Simulation, ELM Learning & Kinetics — open tokamak plasma control platform"
 authors = ["Deepiri <research@deepiri.ai>"]
 readme = "README.md"

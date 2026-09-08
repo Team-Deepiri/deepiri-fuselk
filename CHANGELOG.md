@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.6.0] - 2026-09-02
 
 ### Added
 - **Reactor Pulse Theatre** — full immersive discharge lifecycle (`sim/reactor_pulse.py`): breakdown → ramp-up → flat-top → ramp-down / disrupt with device-faithful power balance (Ip, Q, P_fusion, divertor peak, neutrons); LiveSimulation `start_pulse`; CLI `fuselk reactor pulse`; API `/api/sim/pulse/start|stop`; immersive HUD `reactor_theatre.html`
